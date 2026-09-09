@@ -1,0 +1,213 @@
+#!/usr/bin/env bash
+# netsignal — internet signal bars for the Claude Code status line.
+#
+# Subcommands:
+#   start        start the background sampler if not already running (idempotent)
+#   stop         stop the sampler
+#   sample       take one latency (+ bandwidth, if due) sample and write state
+#   status       print the current state as JSON
+#   render       print the signal fragment (used by `statusline` and ccstatusline)
+#   statusline   read Claude Code's status-line JSON on stdin, run the wrapped
+#                status line (NETSIGNAL_INNER, if set) and append the signal
+#   install      point settings.json statusLine at this script, wrapping the
+#                existing one; `install --force` overwrites an earlier install
+#   uninstall    restore the previous statusLine
+#
+# Config (env vars, all optional):
+#   NETSIGNAL_LATENCY_URL   default https://api.anthropic.com/   (TTFB is the latency)
+#   NETSIGNAL_BW_URL        default https://speed.cloudflare.com/__down?bytes=3000000
+#   NETSIGNAL_INTERVAL      seconds between latency samples   (30)
+#   NETSIGNAL_BW_INTERVAL   seconds between bandwidth samples (300); 0 disables
+#   NETSIGNAL_IDLE          sampler exits after this many idle seconds (900)
+#   NETSIGNAL_GOOD / NETSIGNAL_OK / NETSIGNAL_BAD  latency thresholds in ms (300/700/1500)
+#   NETSIGNAL_STYLE         bars | short | full   (bars: "▂▄▆", short: "▂▄▆ 48ms", full adds Mbps)
+#   NETSIGNAL_INNER         a status-line command to run first; its output is kept
+#   NETSIGNAL_DIR           state dir (default $CLAUDE_PLUGIN_DATA or ~/.cache/claude-netsignal)
+
+set -uo pipefail
+
+DIR=${NETSIGNAL_DIR:-${CLAUDE_PLUGIN_DATA:-$HOME/.cache/claude-netsignal}}
+STATE="$DIR/state.json"
+PIDFILE="$DIR/sampler.pid"
+TOUCH="$DIR/last-read"
+LOG="$DIR/sampler.log"
+CONF="$DIR/config"
+
+LATENCY_URL=${NETSIGNAL_LATENCY_URL:-https://api.anthropic.com/}
+BW_URL=${NETSIGNAL_BW_URL:-'https://speed.cloudflare.com/__down?bytes=3000000'}
+INTERVAL=${NETSIGNAL_INTERVAL:-30}
+BW_INTERVAL=${NETSIGNAL_BW_INTERVAL:-300}
+IDLE=${NETSIGNAL_IDLE:-900}
+GOOD=${NETSIGNAL_GOOD:-300}
+OK=${NETSIGNAL_OK:-700}
+BAD=${NETSIGNAL_BAD:-1500}
+STYLE=${NETSIGNAL_STYLE:-full}
+
+mkdir -p "$DIR"
+
+now() { date +%s; }
+
+# ---------- sampling ----------
+
+sample_latency() {
+  # TTFB in ms to the latency URL; 0 on failure. Any HTTP status counts as reachable.
+  local t
+  t=$(curl -sS -o /dev/null --max-time 5 -w '%{time_starttransfer}' "$LATENCY_URL" 2>/dev/null) || t=0
+  awk -v t="${t:-0}" 'BEGIN { printf "%d", t * 1000 }'
+}
+
+sample_bw() {
+  # Download speed in Mbit/s; 0 on failure.
+  local s
+  s=$(curl -sS -o /dev/null --max-time 20 -w '%{speed_download}' "$BW_URL" 2>/dev/null) || s=0
+  awk -v s="${s:-0}" 'BEGIN { printf "%.1f", s * 8 / 1000000 }'
+}
+
+read_field() { # read_field key default
+  [[ -f $STATE ]] || { printf '%s' "$2"; return; }
+  local v
+  v=$(sed -n "s/.*\"$1\":\([0-9.]*\).*/\1/p" "$STATE" | head -1)
+  printf '%s' "${v:-$2}"
+}
+
+write_state() { # write_state ts latency bw bw_ts
+  local tmp="$STATE.tmp.$$"
+  printf '{"ts":%s,"latency_ms":%s,"bw_mbps":%s,"bw_ts":%s}\n' "$1" "$2" "$3" "$4" > "$tmp" && mv -f "$tmp" "$STATE"
+}
+
+do_sample() {
+  local ts lat bw bw_ts
+  ts=$(now)
+  lat=$(sample_latency)
+  bw=$(read_field bw_mbps 0)
+  bw_ts=$(read_field bw_ts 0)
+  if (( BW_INTERVAL > 0 )) && (( ts - bw_ts >= BW_INTERVAL )) && (( lat > 0 )); then
+    bw=$(sample_bw); bw_ts=$ts
+  fi
+  write_state "$ts" "$lat" "$bw" "$bw_ts"
+}
+
+sampler_running() {
+  [[ -f $PIDFILE ]] && kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null
+}
+
+loop() {
+  echo $$ > "$PIDFILE"
+  trap 'rm -f "$PIDFILE"; exit 0' TERM INT
+  touch "$TOUCH"
+  while :; do
+    do_sample
+    # Exit when nobody has rendered the status line for a while.
+    local last; last=$(stat -f %m "$TOUCH" 2>/dev/null || stat -c %Y "$TOUCH" 2>/dev/null || echo 0)
+    if (( $(now) - last > IDLE )); then rm -f "$PIDFILE"; exit 0; fi
+    sleep "$INTERVAL"
+  done
+}
+
+cmd_start() {
+  touch "$TOUCH"
+  sampler_running && exit 0
+  nohup "$0" __loop >>"$LOG" 2>&1 < /dev/null &
+  disown 2>/dev/null || true
+}
+
+cmd_stop() {
+  sampler_running && kill "$(cat "$PIDFILE")" 2>/dev/null
+  rm -f "$PIDFILE"
+}
+
+# ---------- rendering ----------
+
+cmd_render() {
+  touch "$TOUCH"
+  # Wake the sampler if it exited while idle; the first sample lands within a second.
+  sampler_running || cmd_start
+  local ts lat bw age
+  ts=$(read_field ts 0); lat=$(read_field latency_ms 0); bw=$(read_field bw_mbps 0)
+  age=$(( $(now) - ts ))
+
+  local dim=$'\033[2m' reset=$'\033[0m' green=$'\033[32m' yellow=$'\033[33m' red=$'\033[31m'
+  local colour bars text
+
+  if (( ts == 0 )) || (( age > INTERVAL * 3 + 5 )); then
+    printf '%s▂▄▆ ?%s' "$dim" "$reset"; return
+  fi
+  if   (( lat <= 0 ));    then colour=$red;    bars='✕'
+  elif (( lat < GOOD ));  then colour=$green;  bars='▂▄▆'
+  elif (( lat < OK ));    then colour=$yellow; bars="▂▄${dim}▆"
+  elif (( lat < BAD ));   then colour=$red;    bars="▂${dim}▄▆"
+  else                         colour=$red;    bars="${dim}▂▄▆"
+  fi
+
+  case $STYLE in
+    bars)  text='' ;;
+    short) text=$( (( lat > 0 )) && printf ' %dms' "$lat" || printf ' offline') ;;
+    *)     text=$( (( lat > 0 )) && printf ' %dms' "$lat" || printf ' offline')
+           if (( BW_INTERVAL > 0 )) && awk -v b="$bw" 'BEGIN{exit !(b>0)}'; then
+             text+=$(printf ' %s↓%s' "$dim" "$reset")$(printf '%s' "$bw" | sed 's/\.0$//')'M'
+           fi ;;
+  esac
+  printf '%s%s%s%s%s' "$colour" "$bars" "$reset" "$text" "$reset"
+}
+
+cmd_statusline() {
+  local input inner=''
+  input=$(cat)
+  local inner_cmd=${NETSIGNAL_INNER:-}
+  [[ -z $inner_cmd && -f $CONF ]] && inner_cmd=$(sed -n 's/^inner=//p' "$CONF")
+  if [[ -n $inner_cmd ]]; then
+    inner=$(printf '%s' "$input" | bash -c "$inner_cmd" 2>/dev/null | head -1)
+  fi
+  local sig; sig=$(cmd_render)
+  if [[ -n $inner ]]; then printf '%s \033[2m·\033[0m %s\n' "$inner" "$sig"
+  else printf '%s\n' "$sig"; fi
+}
+
+# ---------- install ----------
+
+settings_file() { printf '%s' "${CLAUDE_SETTINGS:-$HOME/.claude/settings.json}"; }
+
+cmd_install() {
+  command -v jq >/dev/null || { echo "netsignal: jq is required for install" >&2; exit 1; }
+  local f; f=$(settings_file)
+  [[ -f $f ]] || echo '{}' > "$f"
+  local self; self=$(cd "$(dirname "$0")" && pwd)/netsignal
+  local current; current=$(jq -r '.statusLine.command // ""' "$f")
+  if [[ $current == *netsignal* && ${1:-} != --force ]]; then
+    echo "netsignal: already installed ($current)"; return
+  fi
+  if [[ -n $current && $current != *netsignal* ]]; then
+    printf 'inner=%s\n' "$current" > "$CONF"
+    echo "netsignal: wrapping existing status line: $current"
+  fi
+  local tmp="$f.tmp.$$"
+  jq --arg c "\"$self\" statusline" '.statusLine = {type:"command", command:$c}' "$f" > "$tmp" && mv -f "$tmp" "$f"
+  echo "netsignal: statusLine set to $self statusline"
+}
+
+cmd_uninstall() {
+  command -v jq >/dev/null || { echo "netsignal: jq is required" >&2; exit 1; }
+  local f; f=$(settings_file)
+  local inner=''; [[ -f $CONF ]] && inner=$(sed -n 's/^inner=//p' "$CONF")
+  local tmp="$f.tmp.$$"
+  if [[ -n $inner ]]; then
+    jq --arg c "$inner" '.statusLine = {type:"command", command:$c}' "$f" > "$tmp"
+  else
+    jq 'del(.statusLine)' "$f" > "$tmp"
+  fi
+  mv -f "$tmp" "$f"; rm -f "$CONF"; cmd_stop
+  echo "netsignal: statusLine restored to ${inner:-default}"
+}
+
+case ${1:-render} in
+  start)      cmd_start ;;
+  stop)       cmd_stop ;;
+  __loop)     loop ;;
+  sample)     do_sample; cat "$STATE" ;;
+  status)     cat "$STATE" 2>/dev/null || echo '{}' ;;
+  render)     cmd_render; echo ;;
+  statusline) cmd_statusline ;;
+  install)    cmd_install "${2:-}" ;;
+  uninstall)  cmd_uninstall ;;
+  *)          sed -n '2,30p' "$0"; exit 1 ;;
+esac

@@ -1,0 +1,10 @@
+{
+  "name": "netsignal",
+  "version": "0.1.0",
+  "description": "Internet signal bars (latency to api.anthropic.com + periodic bandwidth) in the Claude Code status line.",
+  "author": { "name": "Avazbek Ibragimov" },
+  "homepage": "https://github.com/avazibra/claude-netsignal",
+  "repository": "https://github.com/avazibra/claude-netsignal",
+  "license": "MIT",
+  "keywords": ["statusline", "network", "latency", "bandwidth"]
+}
