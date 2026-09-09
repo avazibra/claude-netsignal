@@ -26,8 +26,9 @@ render, so nothing keeps running once you close Claude Code.
 /netsignal
 ```
 
-`/netsignal` runs the install step, which points `statusLine` in `~/.claude/settings.json` at
-the plugin. If you already have a status line it is kept and the signal is appended to it.
+`/netsignal` runs the install step, which writes a small shim at `~/.claude/netsignal` and points
+`statusLine` in `~/.claude/settings.json` at it. The shim resolves the currently installed
+plugin version on every run, so plugin updates never break the status line. If you already have a status line it is kept and the signal is appended to it.
 `/netsignal` also removes it or tunes thresholds on request.
 
 Manual equivalents: `bin/netsignal install`, `bin/netsignal uninstall`, `bin/netsignal status`.

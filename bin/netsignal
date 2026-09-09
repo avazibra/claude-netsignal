@@ -180,9 +180,20 @@ cmd_install() {
     printf 'inner=%s\n' "$current" > "$CONF"
     echo "netsignal: wrapping existing status line: $current"
   fi
+  # A shim resolves the live plugin path on every run, so a plugin update (which
+  # changes the versioned install dir) does not break the status line.
+  local shim="$HOME/.claude/netsignal" root; root=$(dirname "$(dirname "$self")")
+  cat > "$shim" <<SHIM
+#!/usr/bin/env bash
+# netsignal shim (written by \`netsignal install\`): exec the currently installed plugin.
+p=\$(jq -r '.plugins["netsignal@claude-netsignal"][0].installPath // empty' "\$HOME/.claude/plugins/installed_plugins.json" 2>/dev/null)
+[[ -n \$p && -x \$p/bin/netsignal ]] || p="$root"
+exec "\$p/bin/netsignal" "\$@"
+SHIM
+  chmod +x "$shim"
   local tmp="$f.tmp.$$"
-  jq --arg c "\"$self\" statusline" '.statusLine = {type:"command", command:$c}' "$f" > "$tmp" && mv -f "$tmp" "$f"
-  echo "netsignal: statusLine set to $self statusline"
+  jq --arg c "\"$shim\" statusline" '.statusLine = {type:"command", command:$c}' "$f" > "$tmp" && mv -f "$tmp" "$f"
+  echo "netsignal: statusLine set to $shim statusline (shim -> $self)"
 }
 
 cmd_uninstall() {
@@ -195,7 +206,7 @@ cmd_uninstall() {
   else
     jq 'del(.statusLine)' "$f" > "$tmp"
   fi
-  mv -f "$tmp" "$f"; rm -f "$CONF"; cmd_stop
+  mv -f "$tmp" "$f"; rm -f "$CONF" "$HOME/.claude/netsignal"; cmd_stop
   echo "netsignal: statusLine restored to ${inner:-default}"
 }
 
