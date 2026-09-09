@@ -1,6 +1,7 @@
 {
   "name": "claude-netsignal",
   "owner": { "name": "Avazbek Ibragimov" },
+  "description": "Internet signal bars for the Claude Code status line.",
   "plugins": [
     {
       "name": "netsignal",
