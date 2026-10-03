@@ -47,13 +47,13 @@ const ALERT = '#cf5f45'
 
 // Sized so a full set (signal, both limits, session, cost) fits one row of
 // the desktop band at a common window width.
-const FONT = 12
+const FONT = 11.5
 const CHAR = FONT * 0.62
 const H = 24
-const PAD = 8
+const PAD = 7
 const GAP = 4
 const ICON = 15
-const BAR = 30
+const BAR = 28
 const FAMILY = "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace"
 
 type Icon = (x: number, color: string, n?: number) => string
