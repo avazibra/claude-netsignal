@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Engine, PluginOptions, Register } from 'claude-code'
 
 import type { NetSample as Sample } from '../types'
+import { type Run, type Style, TONES, pill, styleFrom } from './pills'
 
 // The latest sample, held by the host so the desktop band redraws on each probe.
 const lastSample = atom({ plugin: 'netsignal', key: 'last' } as const, null)
@@ -16,9 +17,12 @@ type Config = {
   latencyUrl: string
   bwUrl: string
   desktopPlacement: string
+  pillStyle: Style
 }
 
-type Meter = { config: Config; last: Sample | null; bwAt: number; inFlight: Promise<void> | null }
+// isDesktop: the desktop app drew the band. It is not always in the surface
+// roster, but it always asks for the band.
+type Meter = { config: Config; last: Sample | null; bwAt: number; inFlight: Promise<void> | null; isDesktop: boolean }
 
 export const configFrom = (options: PluginOptions): Config => ({
   style: String(options.style ?? 'full'),
@@ -30,6 +34,7 @@ export const configFrom = (options: PluginOptions): Config => ({
   latencyUrl: String(options.latencyUrl ?? 'https://api.anthropic.com/'),
   bwUrl: String(options.bandwidthUrl ?? 'https://speed.cloudflare.com/__down?bytes=3000000'),
   desktopPlacement: String(options.desktopPlacement ?? 'pill'),
+  pillStyle: styleFrom(options.pillStyle),
 })
 
 export const bars = (latencyMs: number, c: Config) => {
@@ -51,14 +56,22 @@ export const level = (last: Sample | null, c: Config): Level => {
   return 'bad'
 }
 
-// Text and background per level for the desktop pill.
-const PILL: Record<Level, { color: string; backgroundColor: string }> = {
-  good: { color: '#2f6b3a', backgroundColor: '#dcebdc' },
-  ok: { color: '#8a6100', backgroundColor: '#f3e8c8' },
-  poor: { color: '#a8412e', backgroundColor: '#f2dcd5' },
-  bad: { color: '#a8412e', backgroundColor: '#f2dcd5' },
-  offline: { color: '#a8412e', backgroundColor: '#f2dcd5' },
-  unknown: { color: '#6f6e69', backgroundColor: '#e6e4d9' },
+// The desktop pill: lit bars and colour by level, the latency, and the last
+// bandwidth reading after a divider when the style shows it.
+const TONE: Record<Level, keyof typeof TONES> = { good: 'good', ok: 'ok', poor: 'bad', bad: 'bad', offline: 'bad', unknown: 'unknown' }
+const LIT: Record<Level, number> = { good: 3, ok: 2, poor: 1, bad: 1, offline: 0, unknown: 3 }
+
+export const signalPill = (last: Sample | null, c: Config) => {
+  const lv = level(last, c)
+  const runs: Run[] = [{ kind: 'icon', icon: 'signal', n: LIT[lv] }]
+  if (last === null) runs.push({ kind: 'text', text: '?', muted: true })
+  else if (last.latencyMs <= 0) runs.push({ kind: 'text', text: 'offline', bold: true })
+  else if (c.style !== 'bars') {
+    runs.push({ kind: 'text', text: `${last.latencyMs}ms`, bold: true })
+    if (c.style === 'full' && c.bwIntervalMs > 0 && last.mbps > 0)
+      runs.push({ kind: 'divider' }, { kind: 'icon', icon: 'download' }, { kind: 'text', text: `${last.mbps}M`, muted: true })
+  }
+  return { ...pill(runs, TONES[TONE[lv]], c.pillStyle), alt: `Network signal: ${render(last, c)}` }
 }
 
 export const render = (last: Sample | null, c: Config) => {
@@ -92,9 +105,9 @@ function sample($: Engine, m: Meter) {
 // The desktop app draws a plugin's status line in its footer as well as the
 // band pill, so there the status line shows only when asked for.
 async function showStatus($: Engine, m: Meter) {
-  let isDesktop = false
+  let isDesktop = m.isDesktop
   try {
-    isDesktop = (await $.session.surfaces()).includes('desktop')
+    isDesktop ||= (await $.session.surfaces()).includes('desktop')
   } catch {
     // No surface roster (a headless run): treat it as the terminal.
   }
@@ -119,7 +132,7 @@ async function probe($: Engine, m: Meter) {
 }
 
 export const register: Register = (on, options) => {
-  const m: Meter = { config: configFrom(options), last: null, bwAt: -Infinity, inFlight: null }
+  const m: Meter = { config: configFrom(options), last: null, bwAt: -Infinity, inFlight: null, isDesktop: false }
 
   on('session.start', async ($, e, next) => {
     const result = await next(e)
@@ -138,18 +151,18 @@ export const register: Register = (on, options) => {
   // beside whatever the plugins beneath draw there, unless the footer was
   // chosen instead. The terminal keeps the status line alone.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.surface === 'desktop' && !m.isDesktop) {
+      m.isDesktop = true
+      await showStatus($, m)
+    }
     const isPill = m.config.desktopPlacement !== 'footer'
     if (e.surface !== 'desktop' || !isPill || e.props.hasSurvey) return next(e)
-    const last = await read($, lastSample)
-    const { Box, Text } = $.ui.resolve(e)
+    const p = signalPill(await read($, lastSample), m.config)
+    const { Box, Svg } = $.ui.resolve(e)
     const below = await next(e)
     return (
       <Box flexDirection="row" alignItems="center" gap={1}>
-        <Box key="netsignal" paddingX={1} backgroundColor={PILL[level(last, m.config)].backgroundColor}>
-          <Text color={PILL[level(last, m.config)].color} bold>
-            {render(last, m.config)}
-          </Text>
-        </Box>
+        <Svg key="netsignal" source={p.source} alt={p.alt} width={p.width} height={p.height} />
         {below}
       </Box>
     )

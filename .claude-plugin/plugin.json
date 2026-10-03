@@ -1,6 +1,6 @@
 {
   "name": "netsignal",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Internet signal bars (latency to api.anthropic.com + periodic bandwidth) in the Claude Code status line.",
   "author": {
     "name": "Avazbek Ibragimov"
@@ -78,6 +78,18 @@
         "both"
       ],
       "default": "pill"
+    },
+    "pillStyle": {
+      "type": "string",
+      "title": "Pill style",
+      "description": "How the desktop pill looks: soft (pastel), outline, solid or dark",
+      "options": [
+        "soft",
+        "outline",
+        "solid",
+        "dark"
+      ],
+      "default": "soft"
     }
   },
   "types": "./types/index.d.ts"

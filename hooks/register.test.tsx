@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { bars, configFrom } from './register'
+import { bars, configFrom, signalPill } from './register'
 
 const start = { cwd: '/', surface: 'terminal', isInteractive: true } as const
 
@@ -119,13 +119,13 @@ test('desktop band shows a pill beside the pills beneath it', async ($, on) => {
   })
 
   const before = await $.ui.mount({ plugin: 'netsignal', surface: 'desktop', component: 'AbovePrompt', props: BAND })
-  expect((await before.find({ key: 'netsignal' }))?.text).toBe('▂▄▆ ?')
+  expect((await before.find({ type: 'Svg' }))?.props.alt).toBe('Network signal: ▂▄▆ ?')
 
   await $.session.start(start)
   await clock.advance(2000)
 
   const band = await $.ui.mount({ plugin: 'netsignal', surface: 'desktop', component: 'AbovePrompt', props: BAND })
-  expect((await band.find({ key: 'netsignal' }))?.text).toBe('▂▄▆ 48ms')
+  expect((await band.find({ type: 'Svg' }))?.props.alt).toBe('Network signal: ▂▄▆ 48ms')
   expect(await band.find({ text: '5h 20%' })).not.toBe(undefined)
 })
 
@@ -177,7 +177,7 @@ test('desktop footer placement keeps the status line and drops the pill', { opti
 
   expect(statuses.at(-1)).toBe('▂▄▆ 48ms')
   const band = await $.ui.mount({ plugin: 'netsignal', surface: 'desktop', component: 'AbovePrompt', props: BAND })
-  expect(await band.find({ key: 'netsignal' })).toBe(undefined)
+  expect(await band.find({ type: 'Svg' })).toBe(undefined)
 })
 
 test('terminal band is left to the plugins beneath', async ($, on) => {
@@ -187,5 +187,49 @@ test('terminal band is left to the plugins beneath', async ($, on) => {
   })
 
   const band = await $.ui.mount({ plugin: 'netsignal', surface: 'terminal', component: 'AbovePrompt', props: BAND })
-  expect(await band.find({ key: 'netsignal' })).toBe(undefined)
+  expect(await band.find({ type: 'Svg' })).toBe(undefined)
+})
+
+test('the desktop pill lights bars by level and shows bandwidth in full style', () => {
+  const c = configFrom({})
+  const good = signalPill({ at: 0, latencyMs: 48, mbps: 19.6 }, c)
+  expect(good.source).toContain('>48ms<')
+  expect(good.source).toContain('>19.6M<')
+  expect(good.source.match(/fill-opacity="0.25"/g)).toBe(null)
+  const slow = signalPill({ at: 0, latencyMs: 900, mbps: 0 }, c)
+  expect(slow.source.match(/fill-opacity="0.25"/g)?.length).toBe(2)
+  expect(signalPill({ at: 0, latencyMs: 0, mbps: 0 }, c).source).toContain('>offline<')
+  expect(signalPill(null, configFrom({ pillStyle: 'dark' })).source).toContain('#33322f')
+})
+
+test('a desktop band clears the footer even when the roster lacks the app', async ($, on) => {
+  const clock = mock.clock(on)
+  const statuses: (string | undefined)[] = []
+
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('session.surfaces', () => ({ value: [] as const }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('ui.status', ($, e) => {
+    statuses.push(e.text)
+    return { value: undefined }
+  })
+  on('http.fetch', async () => {
+    await clock.sleep(48)
+    return { value: { status: 200, ok: true, headers: {}, text: '' } }
+  })
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
+    const { Box } = $.ui.resolve(e)
+    return <Box key="other" />
+  })
+
+  await $.session.start(start)
+  await clock.advance(2000)
+  expect(statuses.at(-1)).toBe('▂▄▆ 48ms')
+
+  await $.ui.mount({ plugin: 'netsignal', surface: 'desktop', component: 'AbovePrompt', props: BAND })
+  expect(statuses.at(-1)).toBe(undefined)
+
+  // The next sample keeps it clear.
+  await clock.advance(30_000)
+  expect(statuses.at(-1)).toBe(undefined)
 })
