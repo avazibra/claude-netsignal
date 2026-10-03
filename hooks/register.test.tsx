@@ -128,6 +128,8 @@ test('desktop band shows a pill beside the pills beneath it', async ($, on) => {
   const band = await $.ui.mount({ plugin: 'netsignal', surface: 'desktop', component: 'AbovePrompt', props: BAND })
   expect((await band.find({ type: 'Svg' }))?.props.alt).toBe('Network signal: ▂▄▆ 48ms')
   expect(await band.find({ text: '5h 20%' })).not.toBe(undefined)
+  // In line with the first row of the pills beneath, not centred on them.
+  expect((await band.find({ type: 'Box' }))?.props.alignItems).toBe('flex-start')
 })
 
 test('desktop hides the footer status line by default', async ($, on) => {
