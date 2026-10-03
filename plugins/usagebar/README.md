@@ -8,8 +8,10 @@ window is and, optionally, what the session has cost.
 ```
 
 - **Terminal**: the line above sits in the status line under the prompt.
-- **Desktop and web apps**: one coloured pill per figure in the band above the prompt, green
-  under 70 %, yellow from 70 %, red from 90 %. The footer status line stays empty there so the
+- **Desktop and web apps**: rounded pills in the band above the prompt. Each limit gets a
+  progress bar with a tick at an even pace (how far through the window the clock is), the
+  percentage and the time until it resets; the bar turns yellow from 70 % and red from 90 %.
+  Beside them, the tokens this session sent and received, the tokens in context, and the cost. The footer status line stays empty there so the
   figures show once; set `desktopPlacement` to `footer` or `both` to change that.
 - **Toast**: once per window when it crosses 90 %, with the time until it resets.
 - **`/usagebar`**: the same figures written out in full.
@@ -45,7 +47,7 @@ repository it works on. Run `/usagebar` in a cloud session to check it.
 ## Options
 
 Every option is a row in `/config`: `style` (`full` adds reset countdowns, `compact` drops
-them), `warnAt` (70), `alertAt` (90), `showContext` (on), `showCost` (off), `desktopPlacement` (`pill`, `footer` or `both`).
+them), `warnAt` (70), `alertAt` (90), `showContext` (on), `showTokens` (on), `showCost` (on), `desktopPlacement` (`pill`, `footer` or `both`).
 
 ## Develop
 

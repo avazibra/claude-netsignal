@@ -1,10 +1,13 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Engine, PluginOptions, Register, SessionMeasureInput } from 'claude-code'
 
-import type { UsageSnapshot as Snapshot, UsageWindow as Window } from '../types'
+import type { UsageSnapshot as Snapshot, UsageTokens as Tokens } from '../types'
+import { type Run, TONES, pill, tokens } from './pills'
 
 // The latest reading, held by the host so the band redraws on each measurement.
 const lastReading = atom({ plugin: 'usagebar', key: 'last' } as const, null)
+// Tokens the session's own turns sent and received, summed turn by turn.
+const tokenTotals = atom({ plugin: 'usagebar', key: 'tokens' } as const, { input: 0, output: 0 })
 
 type Config = {
   style: string
@@ -12,6 +15,7 @@ type Config = {
   alertAt: number
   showContext: boolean
   showCost: boolean
+  showTokens: boolean
   desktopPlacement: string
 }
 
@@ -20,7 +24,8 @@ export const configFrom = (options: PluginOptions): Config => ({
   warnAt: Number(options.warnAt ?? 70),
   alertAt: Number(options.alertAt ?? 90),
   showContext: options.showContext !== false,
-  showCost: options.showCost === true,
+  showCost: options.showCost !== false,
+  showTokens: options.showTokens !== false,
   desktopPlacement: String(options.desktopPlacement ?? 'pill'),
 })
 
@@ -29,6 +34,7 @@ type Figures = Pick<SessionMeasureInput, 'context' | 'rateLimits' | 'cost'>
 export const snapshotFrom = (f: Figures): Snapshot => ({
   windows: f.rateLimits.map(w => ({ kind: w.kind, percent: w.percentUsed, resetsAt: w.resetsAt })),
   contextPercent: f.context.percent,
+  contextTokens: f.context.tokens,
   usd: f.cost?.usd,
 })
 
@@ -39,14 +45,59 @@ export type Level = 'good' | 'warn' | 'alert'
 export const level = (percent: number, c: Config): Level =>
   percent >= c.alertAt ? 'alert' : percent >= c.warnAt ? 'warn' : 'good'
 
-// "2h10m", "3d4h", "12m": how long until a window resets.
-export const until = (resetsAt: string | undefined, now: number) => {
+// "2h10m", "3d4h", "12m" (or "2h 10m" spaced): how long until a window resets.
+export const until = (resetsAt: string | undefined, now: number, sep = '') => {
   const at = resetsAt ? Date.parse(resetsAt) : NaN
   if (Number.isNaN(at)) return ''
   const min = Math.max(0, Math.round((at - now) / 60_000))
-  if (min >= 24 * 60) return `${Math.floor(min / 1440)}d${Math.floor((min % 1440) / 60)}h`
-  if (min >= 60) return `${Math.floor(min / 60)}h${min % 60}m`
+  if (min >= 24 * 60) return `${Math.floor(min / 1440)}d${sep}${Math.floor((min % 1440) / 60)}h`
+  if (min >= 60) return `${Math.floor(min / 60)}h${sep}${min % 60}m`
   return `${min}m`
+}
+
+const WINDOW_MS: Record<string, number> = { five_hour: 5 * 3_600_000, seven_day: 7 * 86_400_000 }
+
+// How far through its window the clock is, 0 to 1; undefined when unknown.
+export const pace = (kind: string, resetsAt: string | undefined, now: number) => {
+  const length = WINDOW_MS[kind]
+  const at = resetsAt ? Date.parse(resetsAt) : NaN
+  if (!length || Number.isNaN(at)) return undefined
+  return Math.max(0, Math.min(1, 1 - (at - now) / length))
+}
+
+// The pills, in groups: the plan limits, the session's tokens, its cost.
+export const pills = (s: Snapshot, t: Tokens, c: Config, now: number) => {
+  const groups: { key: string; runs: Run[]; tone: (typeof TONES)[keyof typeof TONES]; alt: string }[][] = []
+  const limits = s.windows.map(w => {
+    const runs: Run[] = [
+      { kind: 'icon', icon: w.kind === 'seven_day' ? 'calendar' : 'gauge' },
+      { kind: 'text', text: label(w.kind), muted: true },
+      { kind: 'bar', percent: w.percent, pace: pace(w.kind, w.resetsAt, now), level: level(w.percent, c) },
+      { kind: 'text', text: pct(w.percent), bold: true },
+    ]
+    const reset = until(w.resetsAt, now, ' ')
+    if (reset) runs.push({ kind: 'divider' }, { kind: 'icon', icon: 'clock' }, { kind: 'text', text: reset, muted: true })
+    const tone = w.kind === 'seven_day' ? TONES.sevenDay : TONES.fiveHour
+    return { key: w.kind, runs, tone, alt: `${label(w.kind)} limit ${pct(w.percent)} used${reset ? `, resets in ${reset}` : ''}` }
+  })
+  if (limits.length) groups.push(limits)
+  const session = []
+  if (c.showTokens && (t.input > 0 || t.output > 0)) {
+    session.push(
+      { key: 'input', runs: [{ kind: 'icon', icon: 'upload' }, { kind: 'text', text: tokens(t.input) }] as Run[], tone: TONES.input, alt: `${tokens(t.input)} tokens sent` },
+      { key: 'output', runs: [{ kind: 'icon', icon: 'download' }, { kind: 'text', text: tokens(t.output) }] as Run[], tone: TONES.output, alt: `${tokens(t.output)} tokens received` },
+    )
+  }
+  if (c.showContext && s.contextTokens !== undefined) {
+    const runs: Run[] = [{ kind: 'icon', icon: 'layers' }, { kind: 'text', text: tokens(s.contextTokens) }]
+    session.push({ key: 'context', runs, tone: TONES.context, alt: `${tokens(s.contextTokens)} tokens in context` })
+  }
+  if (session.length) groups.push(session)
+  if (c.showCost && s.usd !== undefined) {
+    const runs: Run[] = [{ kind: 'icon', icon: 'coin' }, { kind: 'text', text: `$${s.usd.toFixed(2)}` }]
+    groups.push([{ key: 'cost', runs, tone: TONES.cost, alt: `$${s.usd.toFixed(2)} this session` }])
+  }
+  return groups.map(g => g.map(p => ({ key: p.key, alt: p.alt, ...pill(p.runs, p.tone) })))
 }
 
 const pct = (n: number) => `${Math.round(n)}%`
@@ -69,14 +120,6 @@ export const render = (s: Snapshot | null, c: Config, now: number) => {
   if (s === null) return undefined
   const p = parts(s, c, now)
   return p.length ? p.map(x => x.text).join(' · ') : undefined
-}
-
-// Text and background per level for the pills, matching netsignal's.
-const PILL: Record<Level | 'neutral', { color: string; backgroundColor: string }> = {
-  good: { color: '#2f6b3a', backgroundColor: '#dcebdc' },
-  warn: { color: '#8a6100', backgroundColor: '#f3e8c8' },
-  alert: { color: '#a8412e', backgroundColor: '#f2dcd5' },
-  neutral: { color: '#6f6e69', backgroundColor: '#e6e4d9' },
 }
 
 // Whether an app (desktop, web, phone) has drawn the band: the desktop app is
@@ -127,6 +170,17 @@ export const register: Register = (on, options) => {
     return result
   })
 
+  on('turn.complete', async ($, e, next) => {
+    const u = e.usage
+    if (u && e.agentId === undefined) {
+      await update($, tokenTotals, t => ({
+        input: t.input + u.input_tokens + u.cache_creation_input_tokens,
+        output: t.output + u.output_tokens,
+      }))
+    }
+    return next(e)
+  })
+
   on('session.measure', async ($, e, next) => {
     await show($, snapshotFrom(e), c, view, alerted)
     return next(e)
@@ -145,17 +199,17 @@ export const register: Register = (on, options) => {
     if (e.surface === 'terminal' || !isPill || e.props.hasSurvey) return next(e)
     const s = await read($, lastReading)
     if (s === null) return next(e)
-    const items = parts(s, c, await $.clock.now())
-    if (!items.length) return next(e)
-    const { Box, Text } = $.ui.resolve(e)
+    const groups = pills(s, await read($, tokenTotals), c, await $.clock.now())
+    if (!groups.length) return next(e)
+    const { Box, Svg } = $.ui.resolve(e)
     const below = await next(e)
     return (
-      <Box flexDirection="row" alignItems="center" gap={1}>
-        {items.map(p => (
-          <Box key={`usagebar-${p.key}`} paddingX={1} backgroundColor={PILL[p.level].backgroundColor}>
-            <Text color={PILL[p.level].color} bold>
-              {p.text}
-            </Text>
+      <Box flexDirection="row" alignItems="center" flexWrap="wrap" gap={1}>
+        {groups.map((g, i) => (
+          <Box key={`usagebar-group-${i}`} flexDirection="row" alignItems="center" gap={1} marginRight={i < groups.length - 1 ? 2 : 0}>
+            {g.map(p => (
+              <Svg key={`usagebar-${p.key}`} source={p.source} alt={p.alt} width={p.width} height={p.height} />
+            ))}
           </Box>
         ))}
         {below}
@@ -172,6 +226,8 @@ export const register: Register = (on, options) => {
     })
     if (!lines.length) lines.push('Plan limits: no reading yet (they arrive with the first reply, and only on a Claude subscription)')
     if (u.context.percent !== undefined) lines.push(`Context: ${pct(u.context.percent)} of ${u.context.window.toLocaleString('en-US')} tokens`)
+    const t = await read($, tokenTotals)
+    if (t.input > 0 || t.output > 0) lines.push(`Tokens: ${tokens(t.input)} sent, ${tokens(t.output)} received`)
     if (u.cost) lines.push(`Session cost: $${u.cost.usd.toFixed(2)}`)
     return { text: lines.join('\n') }
   })
