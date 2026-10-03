@@ -2,10 +2,13 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Engine, PluginOptions, Register } from 'claude-code'
 
 import type { NetSample as Sample } from '../types'
-import { type Run, type Style, TONES, pill, styleFrom } from './pills'
+import { type Run, STYLES, type Style, TONES, pill, styleFrom } from './pills'
 
 // The latest sample, held by the host so the desktop band redraws on each probe.
 const lastSample = atom({ plugin: 'netsignal', key: 'last' } as const, null)
+// The pill style usagebar's switch or /pillstyle picked, followed here so one
+// switch restyles both; null until one is picked, then it wins over the option.
+const pickedStyle = atom({ plugin: 'netsignal', key: 'style' } as const, null)
 
 type Config = {
   style: string
@@ -61,7 +64,7 @@ export const level = (last: Sample | null, c: Config): Level => {
 const TONE: Record<Level, keyof typeof TONES> = { good: 'good', ok: 'ok', poor: 'bad', bad: 'bad', offline: 'bad', unknown: 'unknown' }
 const LIT: Record<Level, number> = { good: 3, ok: 2, poor: 1, bad: 1, offline: 0, unknown: 3 }
 
-export const signalPill = (last: Sample | null, c: Config) => {
+export const signalPill = (last: Sample | null, c: Config, style: Style = c.pillStyle) => {
   const lv = level(last, c)
   const runs: Run[] = [{ kind: 'icon', icon: 'signal', n: LIT[lv] }]
   if (last === null) runs.push({ kind: 'text', text: '?', muted: true })
@@ -71,7 +74,7 @@ export const signalPill = (last: Sample | null, c: Config) => {
     if (c.style === 'full' && c.bwIntervalMs > 0 && last.mbps > 0)
       runs.push({ kind: 'divider' }, { kind: 'icon', icon: 'download' }, { kind: 'text', text: `${last.mbps}M`, muted: true })
   }
-  return { ...pill(runs, TONES[TONE[lv]], c.pillStyle), alt: `Network signal: ${render(last, c)}` }
+  return { ...pill(runs, TONES[TONE[lv]], style), alt: `Network signal: ${render(last, c)}` }
 }
 
 export const render = (last: Sample | null, c: Config) => {
@@ -142,8 +145,26 @@ export const register: Register = (on, options) => {
       description: 'Show the latest network signal sample; "now" re-samples first',
       argumentHint: '[now]',
     })
+    try {
+      const stored = await $.store.get('pillStyle')
+      if (STYLES.includes(stored as Style)) await update($, pickedStyle, () => stored as Style)
+    } catch {
+      // No store (a host without one): the pillStyle option stands.
+    }
     void sample($, m)
     $.clock.every(m.config.intervalMs, () => void sample($, m))
+    return result
+  })
+
+  // usagebar owns the style switch: follow each style it writes, and remember
+  // it for sessions where usagebar is not loaded.
+  on('state.set', async ($, e, next) => {
+    const result = await next(e)
+    const w = e as { plugin: string; key: string; value: unknown }
+    if (w.plugin === 'usagebar' && w.key === 'style' && STYLES.includes(w.value as Style)) {
+      await update($, pickedStyle, () => w.value as Style)
+      await $.store.set('pillStyle', w.value)
+    }
     return result
   })
 
@@ -157,7 +178,7 @@ export const register: Register = (on, options) => {
     }
     const isPill = m.config.desktopPlacement !== 'footer'
     if (e.surface !== 'desktop' || !isPill || e.props.hasSurvey) return next(e)
-    const p = signalPill(await read($, lastSample), m.config)
+    const p = signalPill(await read($, lastSample), m.config, (await read($, pickedStyle)) ?? m.config.pillStyle)
     const { Box, Svg } = $.ui.resolve(e)
     const below = await next(e)
     return (

@@ -1,3 +1,4 @@
+import type { Register } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
 import { bars, configFrom, signalPill } from './register'
@@ -232,4 +233,50 @@ test('a desktop band clears the footer even when the roster lacks the app', asyn
   // The next sample keeps it clear.
   await clock.advance(30_000)
   expect(statuses.at(-1)).toBe(undefined)
+})
+
+// Stands in for usagebar: its switch writes usagebar.style.
+const usagebar = {
+  name: 'usagebar',
+  register: ((on: Parameters<Register>[0]) => {
+    on('command.run', { command: 'pick' }, async ($, e) => {
+      await $.state.set({ plugin: 'usagebar', key: 'style' } as never, e.args as never)
+      return { text: '' }
+    })
+  }) as Register,
+}
+
+test("follows the style usagebar's switch picks, and remembers it", { plugins: [usagebar] }, async ($, on) => {
+  const clock = mock.clock(on)
+  const stored: Record<string, unknown> = {}
+
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('session.surfaces', () => ({ value: ['desktop'] as const }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('ui.status', () => ({ value: undefined }))
+  on('store.get', ($, e) => ({ value: stored[e.key] }))
+  on('store.set', ($, e) => {
+    stored[e.key] = e.value
+    return { value: undefined }
+  })
+  on('http.fetch', async () => {
+    await clock.sleep(48)
+    return { value: { status: 200, ok: true, headers: {}, text: '' } }
+  })
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
+    const { Box } = $.ui.resolve(e)
+    return <Box key="other" />
+  })
+
+  await $.session.start(start)
+  await clock.advance(2000)
+  const bg = async () => {
+    const band = await $.ui.mount({ plugin: 'netsignal', surface: 'desktop', component: 'AbovePrompt', props: BAND })
+    return String((await band.find({ type: 'Svg' }))?.props.source).match(/fill="(#[0-9a-f]{6})"/)?.[1]
+  }
+  expect(await bg()).toBe('#d9eadb')
+
+  await $.command.run({ command: 'pick', args: 'dark', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })
+  expect(await bg()).toBe('#33322f')
+  expect(stored.pillStyle).toBe('dark')
 })

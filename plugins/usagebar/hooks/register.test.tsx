@@ -35,6 +35,12 @@ function wire(on: On, surfaces: ('terminal' | 'desktop')[] = ['terminal']) {
   const clock = mock.clock(on, { now: NOW })
   const statuses: (string | undefined)[] = []
   const toasts: string[] = []
+  const stored: Record<string, unknown> = {}
+  on('store.get', ($, e) => ({ value: stored[e.key] }))
+  on('store.set', ($, e) => {
+    stored[e.key] = e.value
+    return { value: undefined }
+  })
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('session.usage', () => ({ value: usage }))
@@ -52,7 +58,7 @@ function wire(on: On, surfaces: ('terminal' | 'desktop')[] = ['terminal']) {
     toasts.push(String(e.text))
     return { value: undefined }
   })
-  return { clock, statuses, toasts }
+  return { clock, statuses, toasts, stored }
 }
 
 test('shows usage on start and follows each measurement', async ($, on) => {
@@ -178,4 +184,33 @@ test('sums the main thread turns into token totals', async ($, on) => {
   await $.turn.complete({ answer: 'c', durationMs: 1, isAborted: false, turnId: 't3', reason: 'answer', usage, agentId: 'sub' })
   const ran = await $.command.run({ command: 'usagebar', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })
   expect(ran.text).toContain('Tokens: 3.0k sent, 1.6k received')
+})
+
+test('the switch and /pillstyle cycle the style and remember it', async ($, on) => {
+  const { clock, stored } = wire(on)
+  stored.pillStyle = 'solid'
+  await $.session.start(start)
+  await clock.settle()
+
+  const props = { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 80, scroll: { offset: 0, bodyRows: 10 }, view: {} }
+  const band = await $.ui.mount({ plugin: 'usagebar', surface: 'desktop', component: 'AbovePrompt', props })
+  const bg = async () => String((await band.find({ type: 'Svg' }))?.props.source).match(/fill="(#[0-9a-f]{6})"/)?.[1]
+  // The style saved in an earlier session comes back: solid fills with the ink.
+  expect(await bg()).toBe('#3f7d68')
+
+  await $.ui.press({ plugin: 'usagebar', key: 'usagebar-style' })
+  expect(stored.pillStyle).toBe('dark')
+  expect(await bg()).toBe('#33322f')
+
+  await $.ui.press({ plugin: 'usagebar', key: 'usagebar-style' })
+  expect(stored.pillStyle).toBe('soft')
+  expect(await bg()).toBe('#d9eae2')
+
+  const ran = await $.command.run({ command: 'pillstyle', args: 'dark', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })
+  expect(ran.text).toBe('Pill style: dark')
+  expect(stored.pillStyle).toBe('dark')
+  expect(await bg()).toBe('#33322f')
+
+  const bad = await $.command.run({ command: 'pillstyle', args: 'neon', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })
+  expect(bad.text).toBe('Pill styles: soft, outline, solid, dark')
 })

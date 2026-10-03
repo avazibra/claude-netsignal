@@ -2,12 +2,16 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Engine, PluginOptions, Register, SessionMeasureInput } from 'claude-code'
 
 import type { UsageSnapshot as Snapshot, UsageTokens as Tokens } from '../types'
-import { type Run, type Style, TONES, pill, styleFrom, tokens } from './pills'
+import { type Run, STYLES, type Style, TONES, pill, styleFrom, tokens } from './pills'
 
 // The latest reading, held by the host so the band redraws on each measurement.
 const lastReading = atom({ plugin: 'usagebar', key: 'last' } as const, null)
 // Tokens the session's own turns sent and received, summed turn by turn.
 const tokenTotals = atom({ plugin: 'usagebar', key: 'tokens' } as const, { input: 0, output: 0 })
+// The pill style picked with the switch or /pillstyle, kept across sessions in
+// $.store; null until one is picked, then it wins over the pillStyle option.
+// netsignal reads it too, so one switch restyles both mods.
+const pickedStyle = atom({ plugin: 'usagebar', key: 'style' } as const, null)
 
 type Config = {
   style: string
@@ -68,7 +72,7 @@ export const pace = (kind: string, resetsAt: string | undefined, now: number) =>
 }
 
 // The pills, in groups: the plan limits, the session's tokens, its cost.
-export const pills = (s: Snapshot, t: Tokens, c: Config, now: number) => {
+export const pills = (s: Snapshot, t: Tokens, c: Config, now: number, style: Style = c.pillStyle) => {
   const groups: { key: string; runs: Run[]; tone: (typeof TONES)[keyof typeof TONES]; alt: string }[][] = []
   const limits = s.windows.map(w => {
     const runs: Run[] = [
@@ -99,7 +103,7 @@ export const pills = (s: Snapshot, t: Tokens, c: Config, now: number) => {
     const runs: Run[] = [{ kind: 'icon', icon: 'coin' }, { kind: 'text', text: `$${s.usd.toFixed(2)}` }]
     groups.push([{ key: 'cost', runs, tone: TONES.cost, alt: `$${s.usd.toFixed(2)} this session` }])
   }
-  return groups.map(g => g.map(p => ({ key: p.key, alt: p.alt, ...pill(p.runs, p.tone, c.pillStyle) })))
+  return groups.map(g => g.map(p => ({ key: p.key, alt: p.alt, ...pill(p.runs, p.tone, style) })))
 }
 
 const pct = (n: number) => `${Math.round(n)}%`
@@ -154,6 +158,14 @@ async function show($: Engine, s: Snapshot, c: Config, view: View, alerted: Set<
   }
 }
 
+// The style after `current`, round the list: what one press of the switch picks.
+export const nextStyle = (current: Style): Style => STYLES[(STYLES.indexOf(current) + 1) % STYLES.length]!
+
+async function pickStyle($: Engine, style: Style) {
+  await update($, pickedStyle, () => style)
+  await $.store.set('pillStyle', style)
+}
+
 export const register: Register = (on, options) => {
   const c = configFrom(options)
   // Windows already toasted about, so each crossing toasts once per reset.
@@ -163,6 +175,17 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     const result = await next(e)
     await $.command.register({ name: 'usagebar', description: 'Show your plan usage, context fill and session cost' })
+    await $.command.register({
+      name: 'pillstyle',
+      description: 'Switch the pill style of usagebar and netsignal; no name picks the next one',
+      argumentHint: '[soft|outline|solid|dark]',
+    })
+    try {
+      const stored = await $.store.get('pillStyle')
+      if (STYLES.includes(stored as Style)) await update($, pickedStyle, () => stored as Style)
+    } catch {
+      // No store (a host without one): the pillStyle option stands.
+    }
     await show($, snapshotFrom(await $.session.usage()), c, view, alerted)
     // Reset countdowns move without a new measurement: redraw them each minute.
     $.clock.every(60_000, async () => {
@@ -201,9 +224,10 @@ export const register: Register = (on, options) => {
     if (e.surface === 'terminal' || !isPill || e.props.hasSurvey) return next(e)
     const s = await read($, lastReading)
     if (s === null) return next(e)
-    const groups = pills(s, await read($, tokenTotals), c, await $.clock.now())
+    const style = (await read($, pickedStyle)) ?? c.pillStyle
+    const groups = pills(s, await read($, tokenTotals), c, await $.clock.now(), style)
     if (!groups.length) return next(e)
-    const { Box, Svg } = $.ui.resolve(e)
+    const { Box, Button, Svg } = $.ui.resolve(e)
     const below = await next(e)
     return (
       <Box flexDirection="row" alignItems="center" flexWrap="wrap" gap={1}>
@@ -214,9 +238,29 @@ export const register: Register = (on, options) => {
             ))}
           </Box>
         ))}
+        <Button
+          key="usagebar-style"
+          label="◐"
+          plain
+          dimColor
+          onPress={async () => {
+            const picked = nextStyle(style)
+            await pickStyle($, picked)
+            $.ui.toast(`Pill style: ${picked}`)
+          }}
+        />
         {below}
       </Box>
     )
+  })
+
+  on('command.run', { command: 'pillstyle' }, async ($, e) => {
+    const asked = e.args.trim().toLowerCase()
+    if (asked && !STYLES.includes(asked as Style)) return { text: `Pill styles: ${STYLES.join(', ')}` }
+    const current = (await read($, pickedStyle)) ?? c.pillStyle
+    const picked = asked ? (asked as Style) : nextStyle(current)
+    await pickStyle($, picked)
+    return { text: `Pill style: ${picked}` }
   })
 
   on('command.run', { command: 'usagebar' }, async $ => {
