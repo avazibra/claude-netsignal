@@ -1,3 +1,4 @@
+import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
 import { configFrom, render, until } from './register'
@@ -29,7 +30,7 @@ test('compact style drops reset times; cost only when asked', () => {
   expect(render({ windows: [] }, configFrom({}), NOW)).toBe(undefined)
 })
 
-function wire(on: Parameters<Parameters<typeof test>[1]>[1]) {
+function wire(on: On) {
   const clock = mock.clock(on, { now: NOW })
   const statuses: (string | undefined)[] = []
   const toasts: string[] = []
@@ -90,7 +91,14 @@ test('draws pills above the prompt in the apps, not the terminal', async ($, on)
   await $.session.start(start)
   await clock.settle()
 
-  const props = { hasSurvey: false, isWorking: false, maxRows: 10 }
+  const props = {
+    hasSurvey: false,
+    isWorking: false,
+    maxRows: 10,
+    bodyColumns: 80,
+    scroll: { offset: 0, bodyRows: 10 },
+    view: {},
+  }
   const desktop = await $.ui.mount({ plugin: 'usagebar', surface: 'desktop', component: 'AbovePrompt', props })
   expect((await desktop.findAll({ type: 'Text', text: /5h 42%/ })).length).toBe(1)
   expect((await desktop.findAll({ type: 'Text', text: /ctx 31%/ })).length).toBe(1)

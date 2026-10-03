@@ -19,6 +19,12 @@ through Claude Code's own network on a timer and pins the signal as the plugin's
 under the prompt. Nothing to install into `settings.json`, no background process, and it stops
 with the session.
 
+## Also in this marketplace: usagebar
+
+[`usagebar`](plugins/usagebar) shows your plan usage (5-hour and weekly limits), context fill
+and session cost in the status line and as pills above the prompt, and works in cloud
+sessions too. `claude plugin install usagebar@claude-netsignal`; see its README for cloud setup.
+
 ## Install
 
 ```
@@ -93,6 +99,7 @@ hooks/register.test.tsx         `claude plugin test .`
 types/index.d.ts                the mod's $.state contract
 skills/netsignal/SKILL.md       /netsignal: classic status line install, remove, tune, diagnose
 bin/netsignal                   classic sampler + renderer + installer (one bash script)
+plugins/usagebar/               the usagebar mod (its own plugin in this marketplace)
 ```
 
 Check the mod with `claude plugin validate .claude-plugin/plugin.json` and `claude plugin test .`.
