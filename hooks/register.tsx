@@ -16,6 +16,7 @@ type Config = {
   ok: number
   bad: number
   intervalMs: number
+  timeoutMs: number
   bwIntervalMs: number
   latencyUrl: string
   bwUrl: string
@@ -33,6 +34,7 @@ export const configFrom = (options: PluginOptions): Config => ({
   ok: Number(options.okMs ?? 700),
   bad: Number(options.badMs ?? 1500),
   intervalMs: Math.max(5, Number(options.intervalSec ?? 30)) * 1000,
+  timeoutMs: Math.max(1, Number(options.timeoutSec ?? 5)) * 1000,
   bwIntervalMs: Math.max(0, Number(options.bandwidthIntervalSec ?? 300)) * 1000,
   latencyUrl: String(options.latencyUrl ?? 'https://api.anthropic.com/'),
   bwUrl: String(options.bandwidthUrl ?? 'https://speed.cloudflare.com/__down?bytes=3000000'),
@@ -52,6 +54,7 @@ export type Level = 'good' | 'ok' | 'poor' | 'bad' | 'offline' | 'unknown'
 
 export const level = (last: Sample | null, c: Config): Level => {
   if (last === null) return 'unknown'
+  if (last.timedOut) return 'bad'
   if (last.latencyMs <= 0) return 'offline'
   if (last.latencyMs < c.good) return 'good'
   if (last.latencyMs < c.ok) return 'ok'
@@ -68,6 +71,7 @@ export const signalPill = (last: Sample | null, c: Config, style: Style = c.pill
   const lv = level(last, c)
   const runs: Run[] = [{ kind: 'icon', icon: 'signal', n: LIT[lv] }]
   if (last === null) runs.push({ kind: 'text', text: '?', muted: true })
+  else if (last.timedOut) runs.push({ kind: 'text', text: 'timeout', bold: true })
   else if (last.latencyMs <= 0) runs.push({ kind: 'text', text: 'offline', bold: true })
   else if (c.style !== 'bars') {
     runs.push({ kind: 'text', text: `${last.latencyMs}ms`, bold: true })
@@ -79,22 +83,29 @@ export const signalPill = (last: Sample | null, c: Config, style: Style = c.pill
 
 export const render = (last: Sample | null, c: Config) => {
   if (last === null) return '▂▄▆ ?'
-  const glyph = bars(last.latencyMs, c)
+  const glyph = last.timedOut ? '···' : bars(last.latencyMs, c)
   if (c.style === 'bars') return glyph
-  let text = `${glyph} ${last.latencyMs > 0 ? `${last.latencyMs}ms` : 'offline'}`
+  let text = `${glyph} ${last.timedOut ? 'timeout' : last.latencyMs > 0 ? `${last.latencyMs}ms` : 'offline'}`
   if (c.style === 'full' && c.bwIntervalMs > 0 && last.mbps > 0) text += ` ↓${last.mbps}M`
   return text
 }
 
-// Time one GET through the host's network; null when it fails.
-async function timed($: Engine, url: string) {
+// Time one GET through the host's network; null when it fails, 'timeout' when
+// no answer comes within timeoutMs (a stalled request is not a latency).
+async function timed($: Engine, url: string, timeoutMs: number) {
   const started = await $.clock.now()
-  try {
-    const res = await $.http.fetch(url)
-    return { ms: (await $.clock.now()) - started, bytes: res.text.length }
-  } catch {
-    return null
-  }
+  const timer = new AbortController()
+  const fetched = $.http.fetch(url).then(
+    async res => ({ ms: (await $.clock.now()) - started, bytes: res.text.length }),
+    () => null,
+  )
+  const timeout = $.clock.sleep(timeoutMs, { signal: timer.signal }).then(
+    () => 'timeout' as const,
+    () => 'timeout' as const,
+  )
+  const res = await Promise.race([fetched, timeout])
+  timer.abort()
+  return res
 }
 
 // One probe at a time: a caller arriving mid-probe waits for that one.
@@ -120,15 +131,19 @@ async function showStatus($: Engine, m: Meter) {
 
 async function probe($: Engine, m: Meter) {
   const c = m.config
-  const lat = await timed($, c.latencyUrl)
+  const lat = await timed($, c.latencyUrl, c.timeoutMs)
   const at = await $.clock.now()
   let mbps = m.last?.mbps ?? 0
-  if (lat && c.bwIntervalMs > 0 && at - m.bwAt >= c.bwIntervalMs) {
-    const bw = await timed($, c.bwUrl)
-    if (bw && bw.ms > 0) mbps = Math.round(((bw.bytes * 8) / (bw.ms / 1000) / 1e6) * 10) / 10
+  if (lat && lat !== 'timeout' && c.bwIntervalMs > 0 && at - m.bwAt >= c.bwIntervalMs) {
+    // The download gets longer: it moves megabytes, not a header.
+    const bw = await timed($, c.bwUrl, c.timeoutMs * 4)
+    if (bw && bw !== 'timeout' && bw.ms > 0) mbps = Math.round(((bw.bytes * 8) / (bw.ms / 1000) / 1e6) * 10) / 10
     m.bwAt = at
   }
-  const latest: Sample = { at, latencyMs: lat ? Math.max(1, Math.round(lat.ms)) : 0, mbps }
+  const latest: Sample =
+    lat === 'timeout'
+      ? { at, latencyMs: 0, mbps, timedOut: true }
+      : { at, latencyMs: lat ? Math.max(1, Math.round(lat.ms)) : 0, mbps }
   m.last = latest
   await showStatus($, m)
   await update($, lastSample, () => latest)
@@ -196,7 +211,11 @@ export const register: Register = (on, options) => {
     const c = m.config
     if (m.last === null) return { text: 'netsignal: no sample yet' }
     const age = Math.round(((await $.clock.now()) - m.last.at) / 1000)
-    const latency = m.last.latencyMs > 0 ? `${m.last.latencyMs} ms to ${c.latencyUrl}` : `${c.latencyUrl} unreachable`
+    const latency = m.last.timedOut
+      ? `no answer from ${c.latencyUrl} within ${c.timeoutMs / 1000} s`
+      : m.last.latencyMs > 0
+        ? `${m.last.latencyMs} ms to ${c.latencyUrl}`
+        : `${c.latencyUrl} unreachable`
     const bw = m.last.mbps > 0 ? `, ${m.last.mbps} Mbit/s down` : ''
     return { text: `netsignal: ${render(m.last, c)} (${latency}${bw}, ${age}s ago)` }
   })
