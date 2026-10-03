@@ -32,8 +32,8 @@ background.
 ## Also in this marketplace: usagebar
 
 [`usagebar`](plugins/usagebar) shows your plan usage (5-hour and weekly limits), context fill
-and session cost in the status line and as pills above the prompt, and works in cloud
-sessions too. `claude plugin install usagebar@claude-statusbar`; see its README for cloud setup.
+and session cost in the status line and as pills above the prompt. In cloud sessions it
+gives you `/usagebar` (the app draws no pills there). `claude plugin install usagebar@claude-statusbar`; see its README for cloud setup.
 
 ## Install
 
