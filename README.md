@@ -103,6 +103,8 @@ plugins/usagebar/               the usagebar mod (its own plugin in this marketp
 ```
 
 Check the mod with `claude plugin validate .claude-plugin/plugin.json` and `claude plugin test .`.
+That run also finds `plugins/usagebar`'s tests, which only pass from their own folder:
+check usagebar with `claude plugin test plugins/usagebar`.
 
 ## License
 
