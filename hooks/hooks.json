@@ -1,16 +1,1 @@
-{
-  "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "startup|resume|clear",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/netsignal\" start",
-            "timeout": 5
-          }
-        ]
-      }
-    ]
-  }
-}
+{ "modules": ["./register.ts"] }

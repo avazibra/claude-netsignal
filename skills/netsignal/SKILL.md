@@ -5,6 +5,13 @@ description: Set up, tune, or remove the netsignal internet-speed indicator in t
 
 # netsignal
 
+Since 0.2.0 the plugin is a mod: its hooks module already shows the signal under the prompt
+and answers `/signal` (`/signal now` re-samples), tuned through `/config`. Only use the classic
+status line below when the user asks for the signal inside their own `statusLine`, uses
+ccstatusline, or runs a Claude Code without function hooks.
+
+## Classic status line
+
 A background sampler measures time-to-first-byte to `api.anthropic.com` every 30 s and
 download speed every 5 min, and the status line shows `▂▄▆ 48ms ↓19M` in green / yellow / red.
 The sampler exits on its own after 15 min without a status-line render, and is restarted by

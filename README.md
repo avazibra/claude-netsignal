@@ -14,15 +14,35 @@ Fable · code · 42k · ▂▄▆ 48ms ↓19M
 - **Colour**: green under 300 ms, yellow under 700 ms, red above; `✕ offline` when
   unreachable; grey `▂▄▆ ?` when there is no fresh sample.
 
-The status line never touches the network itself. A tiny background sampler writes one JSON
-file, the status line reads it, and the sampler exits by itself 15 minutes after the last
-render, so nothing keeps running once you close Claude Code.
+Since 0.2.0 netsignal is a Claude Code mod: a hooks module (`hooks/register.ts`) samples
+through Claude Code's own network on a timer and pins the signal as the plugin's status line
+under the prompt. Nothing to install into `settings.json`, no background process, and it stops
+with the session.
 
 ## Install
 
 ```
 /plugin marketplace add avazibra/claude-netsignal
 /plugin install netsignal@claude-netsignal
+```
+
+The signal appears under the prompt as soon as the session starts. `/signal` prints the latest
+sample in full; `/signal now` re-samples first.
+
+### Configure the mod
+
+Every option is a row in `/config` (or `pluginConfigs.netsignal` in settings): `style`
+(`bars`, `short`, `full`), `goodMs` / `okMs` / `badMs` (300 / 700 / 1500), `intervalSec` (30),
+`bandwidthIntervalSec` (300; `0` disables), `latencyUrl`, `bandwidthUrl`. The mod draws plain
+text, so levels show as filled bars `▂▄▆`, `▂▄·`, `▂··`, `···` and `✕ offline` instead of colour.
+
+## Classic status line (older Claude Code)
+
+On a Claude Code without function hooks, or to put the signal inside your own `statusLine`,
+use the bash script. A tiny background sampler writes one JSON file, the status line reads it,
+and the sampler exits by itself 15 minutes after the last render.
+
+```
 /netsignal
 ```
 
@@ -37,9 +57,9 @@ Manual equivalents: `bin/netsignal install`, `bin/netsignal uninstall`, `bin/net
 
 Skip `install` and add a **Custom Command** widget running `<plugin-dir>/bin/netsignal render`.
 
-## Configure
+### Configure the classic status line
 
-Environment variables, read by the status-line command (prefix them in the
+For the classic status line, environment variables, read by the status-line command (prefix them in the
 `statusLine.command` string to make them persistent):
 
 | Variable | Default | Meaning |
@@ -60,13 +80,14 @@ Requires `bash`, `curl`, `awk`; `jq` only for `install`/`uninstall`. macOS and L
 ```
 .claude-plugin/plugin.json      plugin manifest
 .claude-plugin/marketplace.json this repo doubles as its own marketplace
-hooks/hooks.json                SessionStart → starts the sampler
-skills/netsignal/SKILL.md       /netsignal: install, remove, tune, diagnose
-bin/netsignal                   sampler + renderer + installer (one bash script)
+hooks/hooks.json                names the hooks module
+hooks/register.ts               the mod: timer, probes, status line, /signal
+hooks/register.test.ts          `claude plugin test .`
+skills/netsignal/SKILL.md       /netsignal: classic status line install, remove, tune, diagnose
+bin/netsignal                   classic sampler + renderer + installer (one bash script)
 ```
 
-Plugins cannot set `statusLine` themselves, which is why install is a skill step rather than
-automatic.
+Check the mod with `claude plugin validate .claude-plugin/plugin.json` and `claude plugin test .`.
 
 ## License
 
