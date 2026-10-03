@@ -25,8 +25,8 @@ after the session's first reply; on an API key you see context (and cost) only.
 ## Install on your machine
 
 ```
-claude plugin marketplace add avazibra/claude-netsignal
-claude plugin install usagebar@claude-netsignal
+claude plugin marketplace add avazibra/claude-statusbar
+claude plugin install usagebar@claude-statusbar
 ```
 
 (or the `/plugin …` forms inside Claude Code), then start a new session.
@@ -39,8 +39,8 @@ declares. What works is installing it in the cloud environment's **setup script*
 (claude.ai → your environment → Setup script), which runs before every session:
 
 ```
-claude plugin marketplace add avazibra/claude-netsignal
-claude plugin install usagebar@claude-netsignal
+claude plugin marketplace add avazibra/claude-statusbar
+claude plugin install usagebar@claude-statusbar
 ```
 
 Every session on that environment then loads usagebar from its first turn, whatever

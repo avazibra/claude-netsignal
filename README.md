@@ -1,4 +1,14 @@
-# claude-netsignal
+# claude-statusbar
+
+Two Claude Code mods in one marketplace: **netsignal** (below) and [**usagebar**](plugins/usagebar).
+
+> Renamed from `claude-netsignal`. If you installed under the old name, switch once:
+>
+> ```
+> claude plugin uninstall netsignal@claude-netsignal; claude plugin uninstall usagebar@claude-netsignal; claude plugin marketplace remove claude-netsignal; claude plugin marketplace add avazibra/claude-statusbar && claude plugin install netsignal@claude-statusbar && claude plugin install usagebar@claude-statusbar
+> ```
+
+## netsignal
 
 Internet signal bars for Claude Code: latency to `api.anthropic.com` and your download speed,
 always in view while you work.
@@ -23,15 +33,15 @@ background.
 
 [`usagebar`](plugins/usagebar) shows your plan usage (5-hour and weekly limits), context fill
 and session cost in the status line and as pills above the prompt, and works in cloud
-sessions too. `claude plugin install usagebar@claude-netsignal`; see its README for cloud setup.
+sessions too. `claude plugin install usagebar@claude-statusbar`; see its README for cloud setup.
 
 ## Install
 
 In a terminal:
 
 ```
-claude plugin marketplace add avazibra/claude-netsignal
-claude plugin install netsignal@claude-netsignal
+claude plugin marketplace add avazibra/claude-statusbar
+claude plugin install netsignal@claude-statusbar
 ```
 
 or the same as `/plugin marketplace add …` and `/plugin install …` at the Claude Code prompt.
@@ -40,8 +50,8 @@ Then start a new session.
 To get a newer version later:
 
 ```
-claude plugin marketplace update claude-netsignal
-claude plugin update netsignal@claude-netsignal
+claude plugin marketplace update claude-statusbar
+claude plugin update netsignal@claude-statusbar
 ```
 
 `install` may note that the `userConfig` options are not set yet. That is fine: every option has
@@ -96,8 +106,8 @@ only for that classic setup; the mod's command is `/signal`.
 
 ## Develop
 
-Load a checkout for one session with `claude --plugin-dir /path/to/claude-netsignal`. For the
-desktop app, add `"env": { "CLAUDE_CODE_PLUGIN_DIRS": "/path/to/claude-netsignal" }` to
+Load a checkout for one session with `claude --plugin-dir /path/to/claude-statusbar`. For the
+desktop app, add `"env": { "CLAUDE_CODE_PLUGIN_DIRS": "/path/to/claude-statusbar" }` to
 `~/.claude/settings.json` and start a new local session. Check changes with
 `claude plugin validate .claude-plugin/plugin.json` and `claude plugin test .`.
 That run also finds `plugins/usagebar`'s tests, which only pass from their own folder:

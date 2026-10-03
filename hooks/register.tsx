@@ -76,7 +76,7 @@ export const signalPill = (last: Sample | null, c: Config, style: Style = c.pill
   else if (c.style !== 'bars') {
     runs.push({ kind: 'text', text: `${last.latencyMs}ms`, bold: true })
     if (c.style === 'full' && c.bwIntervalMs > 0 && last.mbps > 0)
-      runs.push({ kind: 'divider' }, { kind: 'icon', icon: 'download' }, { kind: 'text', text: `${last.mbps}M`, muted: true })
+      runs.push({ kind: 'icon', icon: 'download' }, { kind: 'text', text: `${last.mbps}M`, muted: true })
   }
   return { ...pill(runs, TONES[TONE[lv]], style), alt: `Network signal: ${render(last, c)}` }
 }

@@ -112,7 +112,7 @@ test('draws pills above the prompt in the apps, not the terminal', async ($, on)
   expect(drawn).toEqual([
     '5h limit 42% used, resets in 2h 10m',
     '7d limit 18% used, resets in 3d 4h',
-    '62.0k tokens in context',
+    '62.0k in context',
     '$1.24 this session',
   ])
 
@@ -162,12 +162,17 @@ test('pills carry a bar with a pace tick, and token counts once turns finish', (
   expect(until('2026-10-03T08:40:00Z', NOW, ' ')).toBe('2h 40m')
 
   const groups = pills(s, { input: 15_600, output: 3_000 }, c, NOW)
-  expect(groups.map(g => g.map(p => p.key))).toEqual([['five_hour'], ['input', 'output', 'context'], ['cost']])
+  expect(groups.map(g => g.map(p => p.key))).toEqual([['five_hour'], ['session'], ['cost']])
   const limit = groups[0]![0]!
   expect(limit.source).toContain('>20%<')
   expect(limit.source).toContain('>2h 40m<')
   expect(limit.alt).toBe('5h limit 20% used, resets in 2h 40m')
-  expect(groups[1]!.map(p => p.alt)).toEqual(['15.6k tokens sent', '3.0k tokens received', '954.2k tokens in context'])
+  // Sent, received and context share one pill, each behind its own colour.
+  const session = groups[1]![0]!
+  expect(session.alt).toBe('15.6k tokens sent, 3.0k received, 954.2k in context')
+  expect(session.source).toContain('#c0583f')
+  expect(session.source).toContain('#4f8a55')
+  expect(session.source).toContain('#4f5fc9')
   expect(groups[2]![0]!.source).toContain('$4.32')
   expect(tokens(1_250_000)).toBe('1.3M')
 })

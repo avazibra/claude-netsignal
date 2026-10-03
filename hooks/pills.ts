@@ -45,13 +45,15 @@ const paint = (style: Style, t: Tone): Paint => {
 const WARN = '#d6a33a'
 const ALERT = '#cf5f45'
 
-const FONT = 13
+// Sized so a full set (signal, both limits, session, cost) fits one row of
+// the desktop band at a common window width.
+const FONT = 12
 const CHAR = FONT * 0.62
-const H = 26
-const PAD = 10
-const GAP = 7
+const H = 24
+const PAD = 8
+const GAP = 4
 const ICON = 15
-const BAR = 46
+const BAR = 30
 const FAMILY = "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace"
 
 type Icon = (x: number, color: string, n?: number) => string
@@ -96,8 +98,9 @@ export const ICONS = {
 } satisfies Record<string, Icon>
 
 // One run of a pill: an icon, a word, a bar or a divider, laid left to right.
+// An icon can carry its own tone, for a pill that holds several figures.
 export type Run =
-  | { kind: 'icon'; icon: keyof typeof ICONS; n?: number }
+  | { kind: 'icon'; icon: keyof typeof ICONS; n?: number; tone?: Tone }
   | { kind: 'text'; text: string; bold?: boolean; muted?: boolean }
   | { kind: 'bar'; percent: number; pace?: number; level: 'good' | 'warn' | 'alert' }
   | { kind: 'divider' }
@@ -115,7 +118,7 @@ export function pill(runs: Run[], tone: Tone, style: Style = 'soft') {
   let x = PAD
   const body: string[] = []
   for (const r of runs) {
-    if (r.kind === 'icon') body.push(ICONS[r.icon](x, p.icon, r.n))
+    if (r.kind === 'icon') body.push(ICONS[r.icon](x, r.tone ? paint(style, r.tone).icon : p.icon, r.n))
     if (r.kind === 'text') {
       body.push(
         `<text x="${x}" y="${mid + FONT * 0.36}" font-family="${FAMILY}" font-size="${FONT}"` +
