@@ -8,7 +8,8 @@ always in view while you work.
 ```
 
 - **Latency**: time to `api.anthropic.com`, sampled every 30 s. That is the network Claude Code
-  actually feels, not a generic ping.
+  actually feels, not a generic ping. Each sample is the fastest of three HTTPS requests, and each
+  request opens a new connection (DNS, TCP and TLS first), so it reads about three times a ping.
 - **Bandwidth**: a 3 MB download every 5 min (Cloudflare's speed endpoint by default;
   Anthropic serves no large static body).
 - **Levels**: good under 300 ms, OK under 700 ms, poor under 1500 ms, bad above; `✕ offline`

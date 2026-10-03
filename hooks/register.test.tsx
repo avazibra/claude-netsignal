@@ -26,22 +26,26 @@ test('samples on start and shows the signal in the status line', async ($, on) =
     statuses.push(e.text)
     return { value: undefined }
   })
+  // Three latency requests per probe; the slow middle one (a lost packet)
+  // does not count, the fastest does.
+  const delays = [120, 2400, 48]
   on('http.fetch', async ($, e) => {
     fetched.push(e.url)
     const isBandwidth = e.url.includes('speed')
-    await clock.sleep(isBandwidth ? 1000 : 48)
+    await clock.sleep(isBandwidth ? 1000 : delays[(fetched.length - 1) % 4]!)
     return { value: { status: 200, ok: true, headers: {}, text: isBandwidth ? 'x'.repeat(2_500_000) : '' } }
   })
 
   await $.session.start(start)
-  await clock.advance(2000)
+  await clock.advance(5000)
 
-  expect(fetched).toEqual(['https://api.anthropic.com/', 'https://speed.cloudflare.com/__down?bytes=3000000'])
+  const api = 'https://api.anthropic.com/'
+  expect(fetched).toEqual([api, api, api, 'https://speed.cloudflare.com/__down?bytes=3000000'])
   expect(statuses.at(-1)).toBe('▂▄▆ 48ms ↓20M')
 
   // The next latency sample comes 30 s later, without a bandwidth probe.
   await clock.advance(30_000)
-  expect(fetched.length).toBe(3)
+  expect(fetched.length).toBe(7)
 
   const ran = await $.command.run({
     command: 'signal',

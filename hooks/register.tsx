@@ -129,9 +129,25 @@ async function showStatus($: Engine, m: Meter) {
   $.ui.status(wantsStatus ? render(m.last, m.config) : undefined)
 }
 
+// Requests per latency probe. Each one opens a fresh connection (DNS, TCP and
+// TLS before the request itself), and one lost packet can add seconds to it,
+// so the fastest of a few is the truest reading of the network.
+const TRIES = 3
+
+async function fastest($: Engine, c: Config) {
+  const first = await timed($, c.latencyUrl, c.timeoutMs)
+  if (first === null || first === 'timeout') return first
+  let best = first
+  for (let i = 1; i < TRIES; i++) {
+    const next = await timed($, c.latencyUrl, c.timeoutMs)
+    if (next && next !== 'timeout' && next.ms < best.ms) best = next
+  }
+  return best
+}
+
 async function probe($: Engine, m: Meter) {
   const c = m.config
-  const lat = await timed($, c.latencyUrl, c.timeoutMs)
+  const lat = await fastest($, c)
   const at = await $.clock.now()
   let mbps = m.last?.mbps ?? 0
   if (lat && lat !== 'timeout' && c.bwIntervalMs > 0 && at - m.bwAt >= c.bwIntervalMs) {
