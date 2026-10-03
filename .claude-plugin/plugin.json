@@ -68,5 +68,6 @@
       "description": "A ~3 MB download timed for bandwidth",
       "default": "https://speed.cloudflare.com/__down?bytes=3000000"
     }
-  }
+  },
+  "types": "./types/index.d.ts"
 }
