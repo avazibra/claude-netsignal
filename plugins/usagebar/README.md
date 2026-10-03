@@ -15,6 +15,8 @@ window is and, optionally, what the session has cost.
   figures show once; set `desktopPlacement` to `footer` or `both` to change that.
 - **Toast**: once per window when it crosses 90 %, with the time until it resets.
 - **`/usagebar`**: the same figures written out in full.
+- **Style switch**: press ◐ at the end of the pills, or type `/pillstyle` (or `/pillstyle dark`),
+  to cycle soft, outline, solid and dark. The pick is remembered and netsignal follows it.
 
 The figures are the ones Claude Code itself reads from each API reply, so nothing is polled
 and nothing leaves the session. Plan limits only exist on a Claude subscription and appear

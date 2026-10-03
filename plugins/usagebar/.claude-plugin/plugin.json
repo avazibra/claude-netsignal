@@ -1,6 +1,6 @@
 {
   "name": "usagebar",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Your Claude plan usage (5-hour and weekly limits), context fill and session cost, in the status line and as pills above the prompt.",
   "author": {
     "name": "Avazbek Ibragimov"
