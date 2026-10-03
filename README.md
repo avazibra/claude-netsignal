@@ -26,7 +26,9 @@ with the session.
 /plugin install netsignal@claude-netsignal
 ```
 
-The signal appears under the prompt as soon as the session starts. `/signal` prints the latest
+The signal appears under the prompt as soon as the session starts. In the desktop app's Code
+tab it is also a coloured pill (green, yellow, red) in the band above the prompt, beside any
+pills other plugins draw there. `/signal` prints the latest
 sample in full; `/signal now` re-samples first.
 
 ### Configure the mod
@@ -34,7 +36,12 @@ sample in full; `/signal now` re-samples first.
 Every option is a row in `/config` (or `pluginConfigs.netsignal` in settings): `style`
 (`bars`, `short`, `full`), `goodMs` / `okMs` / `badMs` (300 / 700 / 1500), `intervalSec` (30),
 `bandwidthIntervalSec` (300; `0` disables), `latencyUrl`, `bandwidthUrl`. The mod draws plain
-text, so levels show as filled bars `▂▄▆`, `▂▄·`, `▂··`, `···` and `✕ offline` instead of colour.
+text in the terminal, so levels show as filled bars `▂▄▆`, `▂▄·`, `▂··`, `···` and `✕ offline`
+instead of colour.
+
+To try a checkout in the desktop app before installing, add
+`"env": { "CLAUDE_CODE_PLUGIN_DIRS": "/path/to/claude-netsignal" }` to `~/.claude/settings.json`
+and start a new session; in a terminal, `claude --plugin-dir /path/to/claude-netsignal`.
 
 ## Classic status line (older Claude Code)
 
@@ -81,8 +88,9 @@ Requires `bash`, `curl`, `awk`; `jq` only for `install`/`uninstall`. macOS and L
 .claude-plugin/plugin.json      plugin manifest
 .claude-plugin/marketplace.json this repo doubles as its own marketplace
 hooks/hooks.json                names the hooks module
-hooks/register.ts               the mod: timer, probes, status line, /signal
-hooks/register.test.ts          `claude plugin test .`
+hooks/register.tsx              the mod: timer, probes, status line, desktop pill, /signal
+hooks/register.test.tsx         `claude plugin test .`
+types/index.d.ts                the mod's $.state contract
 skills/netsignal/SKILL.md       /netsignal: classic status line install, remove, tune, diagnose
 bin/netsignal                   classic sampler + renderer + installer (one bash script)
 ```

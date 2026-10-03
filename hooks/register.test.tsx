@@ -90,3 +90,48 @@ test('bars style shows only the glyph', { options: { style: 'bars' } }, async ($
 
   expect(statuses.at(-1)).toBe('▂··')
 })
+
+const BAND = {
+  hasSurvey: false,
+  isWorking: false,
+  maxRows: 10,
+  bodyColumns: 120,
+  scroll: { offset: 0, bodyRows: 10 },
+  view: {},
+} as const
+
+test('desktop band shows a pill beside the pills beneath it', async ($, on) => {
+  const clock = mock.clock(on)
+
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('ui.status', () => ({ value: undefined }))
+  on('http.fetch', async () => {
+    await clock.sleep(48)
+    return { value: { status: 200, ok: true, headers: {}, text: '' } }
+  })
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text key="other">5h 20%</Text>
+  })
+
+  const before = await $.ui.mount({ plugin: 'netsignal', surface: 'desktop', component: 'AbovePrompt', props: BAND })
+  expect((await before.find({ key: 'netsignal' }))?.text).toBe('▂▄▆ ?')
+
+  await $.session.start(start)
+  await clock.advance(2000)
+
+  const band = await $.ui.mount({ plugin: 'netsignal', surface: 'desktop', component: 'AbovePrompt', props: BAND })
+  expect((await band.find({ key: 'netsignal' }))?.text).toBe('▂▄▆ 48ms')
+  expect(await band.find({ text: '5h 20%' })).not.toBe(undefined)
+})
+
+test('terminal band is left to the plugins beneath', async ($, on) => {
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text key="other">x</Text>
+  })
+
+  const band = await $.ui.mount({ plugin: 'netsignal', surface: 'terminal', component: 'AbovePrompt', props: BAND })
+  expect(await band.find({ key: 'netsignal' })).toBe(undefined)
+})

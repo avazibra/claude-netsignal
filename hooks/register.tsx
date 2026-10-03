@@ -1,6 +1,10 @@
+import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Engine, PluginOptions, Register } from 'claude-code'
 
-type Sample = { at: number; latencyMs: number; mbps: number }
+import type { NetSample as Sample } from '../types'
+
+// The latest sample, held by the host so the desktop band redraws on each probe.
+const lastSample = atom({ plugin: 'netsignal', key: 'last' } as const, null)
 
 type Config = {
   style: string
@@ -32,6 +36,27 @@ export const bars = (latencyMs: number, c: Config) => {
   if (latencyMs < c.ok) return '▂▄·'
   if (latencyMs < c.bad) return '▂··'
   return '···'
+}
+
+export type Level = 'good' | 'ok' | 'poor' | 'bad' | 'offline' | 'unknown'
+
+export const level = (last: Sample | null, c: Config): Level => {
+  if (last === null) return 'unknown'
+  if (last.latencyMs <= 0) return 'offline'
+  if (last.latencyMs < c.good) return 'good'
+  if (last.latencyMs < c.ok) return 'ok'
+  if (last.latencyMs < c.bad) return 'poor'
+  return 'bad'
+}
+
+// Text and background per level for the desktop pill.
+const PILL: Record<Level, { color: string; backgroundColor: string }> = {
+  good: { color: '#2f6b3a', backgroundColor: '#dcebdc' },
+  ok: { color: '#8a6100', backgroundColor: '#f3e8c8' },
+  poor: { color: '#a8412e', backgroundColor: '#f2dcd5' },
+  bad: { color: '#a8412e', backgroundColor: '#f2dcd5' },
+  offline: { color: '#a8412e', backgroundColor: '#f2dcd5' },
+  unknown: { color: '#6f6e69', backgroundColor: '#e6e4d9' },
 }
 
 export const render = (last: Sample | null, c: Config) => {
@@ -72,8 +97,10 @@ async function probe($: Engine, m: Meter) {
     if (bw && bw.ms > 0) mbps = Math.round(((bw.bytes * 8) / (bw.ms / 1000) / 1e6) * 10) / 10
     m.bwAt = at
   }
-  m.last = { at, latencyMs: lat ? Math.max(1, Math.round(lat.ms)) : 0, mbps }
-  $.ui.status(render(m.last, c))
+  const latest: Sample = { at, latencyMs: lat ? Math.max(1, Math.round(lat.ms)) : 0, mbps }
+  m.last = latest
+  $.ui.status(render(latest, c))
+  await update($, lastSample, () => latest)
 }
 
 export const register: Register = (on, options) => {
@@ -90,6 +117,26 @@ export const register: Register = (on, options) => {
     void sample($, m)
     $.clock.every(m.config.intervalMs, () => void sample($, m))
     return result
+  })
+
+  // The desktop app shows plugin pills in the band above the prompt: add ours
+  // beside whatever the plugins beneath draw there. The terminal keeps the
+  // status line alone.
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.surface !== 'desktop' || e.props.hasSurvey) return next(e)
+    const last = await read($, lastSample)
+    const { Box, Text } = $.ui.resolve(e)
+    const below = await next(e)
+    return (
+      <Box flexDirection="row" alignItems="center" gap={1}>
+        <Box key="netsignal" paddingX={1} backgroundColor={PILL[level(last, m.config)].backgroundColor}>
+          <Text color={PILL[level(last, m.config)].color} bold>
+            {render(last, m.config)}
+          </Text>
+        </Box>
+        {below}
+      </Box>
+    )
   })
 
   on('command.run', { command: 'signal' }, async ($, e) => {
