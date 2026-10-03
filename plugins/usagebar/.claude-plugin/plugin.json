@@ -1,0 +1,65 @@
+{
+  "name": "usagebar",
+  "version": "0.1.0",
+  "description": "Your Claude plan usage (5-hour and weekly limits), context fill and session cost, in the status line and as pills above the prompt.",
+  "author": {
+    "name": "Avazbek Ibragimov"
+  },
+  "homepage": "https://github.com/avazibra/claude-netsignal",
+  "repository": "https://github.com/avazibra/claude-netsignal",
+  "license": "MIT",
+  "keywords": [
+    "statusline",
+    "usage",
+    "rate-limit",
+    "context"
+  ],
+  "userConfig": {
+    "style": {
+      "type": "string",
+      "title": "Style",
+      "description": "compact (percentages) or full (+ reset times and cost)",
+      "options": [
+        "compact",
+        "full"
+      ],
+      "default": "full"
+    },
+    "warnAt": {
+      "type": "number",
+      "title": "Warn at (%)",
+      "description": "Pills turn yellow from this percentage",
+      "default": 70
+    },
+    "alertAt": {
+      "type": "number",
+      "title": "Alert at (%)",
+      "description": "Pills turn red and a toast shows once from this percentage",
+      "default": 90
+    },
+    "showContext": {
+      "type": "boolean",
+      "title": "Show context",
+      "description": "Also show how full the context window is",
+      "default": true
+    },
+    "showCost": {
+      "type": "boolean",
+      "title": "Show cost",
+      "description": "Also show the session's cost in dollars",
+      "default": false
+    },
+    "desktopPlacement": {
+      "type": "string",
+      "title": "Desktop placement",
+      "description": "Where the desktop app shows usage: pill (above the prompt), footer (status line beside the model) or both",
+      "options": [
+        "pill",
+        "footer",
+        "both"
+      ],
+      "default": "pill"
+    }
+  },
+  "types": "./types/index.d.ts"
+}

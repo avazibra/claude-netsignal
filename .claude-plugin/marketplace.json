@@ -1,12 +1,19 @@
 {
   "name": "claude-netsignal",
-  "owner": { "name": "Avazbek Ibragimov" },
-  "description": "Internet signal bars for the Claude Code status line.",
+  "owner": {
+    "name": "Avazbek Ibragimov"
+  },
+  "description": "Claude Code mods: internet signal bars and a plan-usage bar.",
   "plugins": [
     {
       "name": "netsignal",
       "source": "./",
       "description": "Internet signal bars (latency to api.anthropic.com + periodic bandwidth) in the Claude Code status line."
+    },
+    {
+      "name": "usagebar",
+      "source": "./plugins/usagebar",
+      "description": "Your Claude plan usage (5-hour and weekly limits), context fill and session cost, in the status line and as pills above the prompt."
     }
   ]
 }

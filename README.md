@@ -18,6 +18,12 @@ netsignal is a Claude Code mod: it samples through Claude Code's own network on 
 session is open and stops with it. Nothing is written to `settings.json` and nothing runs in the
 background.
 
+## Also in this marketplace: usagebar
+
+[`usagebar`](plugins/usagebar) shows your plan usage (5-hour and weekly limits), context fill
+and session cost in the status line and as pills above the prompt, and works in cloud
+sessions too. `claude plugin install usagebar@claude-netsignal`; see its README for cloud setup.
+
 ## Install
 
 In a terminal:
@@ -91,6 +97,8 @@ Load a checkout for one session with `claude --plugin-dir /path/to/claude-netsig
 desktop app, add `"env": { "CLAUDE_CODE_PLUGIN_DIRS": "/path/to/claude-netsignal" }` to
 `~/.claude/settings.json` and start a new local session. Check changes with
 `claude plugin validate .claude-plugin/plugin.json` and `claude plugin test .`.
+That run also finds `plugins/usagebar`'s tests, which only pass from their own folder:
+check usagebar with `claude plugin test plugins/usagebar`.
 
 ## Classic status line (older Claude Code)
 
@@ -142,6 +150,7 @@ hooks/register.test.tsx         `claude plugin test .`
 types/index.d.ts                the mod's $.state contract
 skills/netsignal/SKILL.md       /netsignal: classic status line install, remove, tune, diagnose
 bin/netsignal                   classic sampler + renderer + installer (one bash script)
+plugins/usagebar/               the usagebar mod (its own plugin in this marketplace)
 ```
 
 ## License
