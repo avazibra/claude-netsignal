@@ -74,6 +74,7 @@ settings:
 | `style` | `full` | `bars` (▂▄▆), `short` (+ ms), `full` (+ Mbps) |
 | `goodMs` / `okMs` / `badMs` | 300 / 700 / 1500 | latency thresholds, ms |
 | `intervalSec` | 30 | seconds between latency samples |
+| `timeoutSec` | 5 | a latency probe with no answer by then shows as `timeout` (the bandwidth download gets four times as long) |
 | `bandwidthIntervalSec` | 300 | seconds between bandwidth samples; `0` disables |
 | `latencyUrl` | `https://api.anthropic.com/` | latency target |
 | `bandwidthUrl` | `https://speed.cloudflare.com/__down?bytes=3000000` | bandwidth target |

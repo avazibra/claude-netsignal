@@ -73,6 +73,39 @@ test('shows offline when the latency probe fails', async ($, on) => {
   expect(statuses.at(-1)).toBe('✕ offline')
 })
 
+test('a probe that stalls past the timeout shows timeout, not its latency', async ($, on) => {
+  const clock = mock.clock(on)
+  const statuses: (string | undefined)[] = []
+  const fetched: string[] = []
+
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('session.surfaces', () => ({ value: ['terminal'] as const }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('ui.status', ($, e) => {
+    statuses.push(e.text)
+    return { value: undefined }
+  })
+  on('http.fetch', async ($, e) => {
+    fetched.push(e.url)
+    await clock.sleep(10_010)
+    return { value: { status: 200, ok: true, headers: {}, text: '' } }
+  })
+
+  await $.session.start(start)
+  await clock.advance(5_000)
+  expect(statuses.at(-1)).toBe('··· timeout')
+  // No bandwidth probe on a stalled network.
+  expect(fetched.length).toBe(1)
+  expect(signalPill({ at: 0, latencyMs: 0, mbps: 0, timedOut: true }, configFrom({})).alt).toBe('Network signal: ··· timeout')
+
+  const ran = await $.command.run({ command: 'signal', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })
+  expect(ran.text).toContain('no answer from https://api.anthropic.com/ within 5 s')
+
+  // The stalled answer arriving late does not overwrite the reading as 10010ms.
+  await clock.advance(6_000)
+  expect(statuses.at(-1)).toBe('··· timeout')
+})
+
 test('bars style shows only the glyph', { options: { style: 'bars' } }, async ($, on) => {
   const clock = mock.clock(on)
   const statuses: (string | undefined)[] = []

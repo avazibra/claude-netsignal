@@ -1,6 +1,6 @@
 {
   "name": "netsignal",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Internet signal bars (latency to api.anthropic.com + periodic bandwidth) in the Claude Code status line.",
   "author": {
     "name": "Avazbek Ibragimov"
@@ -49,6 +49,12 @@
       "title": "Latency interval (s)",
       "description": "Seconds between latency samples",
       "default": 30
+    },
+    "timeoutSec": {
+      "type": "number",
+      "title": "Timeout (s)",
+      "description": "A latency probe with no answer within this shows as timeout",
+      "default": 5
     },
     "bandwidthIntervalSec": {
       "type": "number",
