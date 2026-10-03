@@ -18,7 +18,15 @@ type Config = {
   desktopPlacement: string
 }
 
-type Meter = { config: Config; last: Sample | null; bwAt: number; inFlight: Promise<void> | null }
+type Meter = {
+  config: Config
+  last: Sample | null
+  bwAt: number
+  inFlight: Promise<void> | null
+  // Set once the desktop app asks this plugin to draw: its surface may be
+  // missing from $.session.surfaces() (a host that never attaches as one).
+  hasSeenDesktop: boolean
+}
 
 export const configFrom = (options: PluginOptions): Config => ({
   style: String(options.style ?? 'full'),
@@ -92,9 +100,9 @@ function sample($: Engine, m: Meter) {
 // The desktop app draws a plugin's status line in its footer as well as the
 // band pill, so there the status line shows only when asked for.
 async function showStatus($: Engine, m: Meter) {
-  let isDesktop = false
+  let isDesktop = m.hasSeenDesktop
   try {
-    isDesktop = (await $.session.surfaces()).includes('desktop')
+    isDesktop ||= (await $.session.surfaces()).includes('desktop')
   } catch {
     // No surface roster (a headless run): treat it as the terminal.
   }
@@ -119,7 +127,7 @@ async function probe($: Engine, m: Meter) {
 }
 
 export const register: Register = (on, options) => {
-  const m: Meter = { config: configFrom(options), last: null, bwAt: -Infinity, inFlight: null }
+  const m: Meter = { config: configFrom(options), last: null, bwAt: -Infinity, inFlight: null, hasSeenDesktop: false }
 
   on('session.start', async ($, e, next) => {
     const result = await next(e)
@@ -138,6 +146,10 @@ export const register: Register = (on, options) => {
   // beside whatever the plugins beneath draw there, unless the footer was
   // chosen instead. The terminal keeps the status line alone.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.surface === 'desktop' && !m.hasSeenDesktop) {
+      m.hasSeenDesktop = true
+      if (m.config.desktopPlacement === 'pill') $.ui.status(undefined)
+    }
     const isPill = m.config.desktopPlacement !== 'footer'
     if (e.surface !== 'desktop' || !isPill || e.props.hasSurvey) return next(e)
     const last = await read($, lastSample)
@@ -153,6 +165,12 @@ export const register: Register = (on, options) => {
         {below}
       </Box>
     )
+  })
+
+  on('session.attach', async ($, e, next) => {
+    const result = await next(e)
+    await showStatus($, m)
+    return result
   })
 
   on('command.run', { command: 'signal' }, async ($, e) => {
