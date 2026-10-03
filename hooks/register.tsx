@@ -18,9 +18,7 @@ type Config = {
   desktopPlacement: string
 }
 
-// isDesktop: the desktop app drew the band. It is not always in the surface
-// roster, but it always asks for the band.
-type Meter = { config: Config; last: Sample | null; bwAt: number; inFlight: Promise<void> | null; isDesktop: boolean }
+type Meter = { config: Config; last: Sample | null; bwAt: number; inFlight: Promise<void> | null }
 
 export const configFrom = (options: PluginOptions): Config => ({
   style: String(options.style ?? 'full'),
@@ -94,9 +92,9 @@ function sample($: Engine, m: Meter) {
 // The desktop app draws a plugin's status line in its footer as well as the
 // band pill, so there the status line shows only when asked for.
 async function showStatus($: Engine, m: Meter) {
-  let isDesktop = m.isDesktop
+  let isDesktop = false
   try {
-    isDesktop ||= (await $.session.surfaces()).includes('desktop')
+    isDesktop = (await $.session.surfaces()).includes('desktop')
   } catch {
     // No surface roster (a headless run): treat it as the terminal.
   }
@@ -121,7 +119,7 @@ async function probe($: Engine, m: Meter) {
 }
 
 export const register: Register = (on, options) => {
-  const m: Meter = { config: configFrom(options), last: null, bwAt: -Infinity, inFlight: null, isDesktop: false }
+  const m: Meter = { config: configFrom(options), last: null, bwAt: -Infinity, inFlight: null }
 
   on('session.start', async ($, e, next) => {
     const result = await next(e)
@@ -140,10 +138,6 @@ export const register: Register = (on, options) => {
   // beside whatever the plugins beneath draw there, unless the footer was
   // chosen instead. The terminal keeps the status line alone.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (e.surface === 'desktop' && !m.isDesktop) {
-      m.isDesktop = true
-      await showStatus($, m)
-    }
     const isPill = m.config.desktopPlacement !== 'footer'
     if (e.surface !== 'desktop' || !isPill || e.props.hasSurvey) return next(e)
     const last = await read($, lastSample)

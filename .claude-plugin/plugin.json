@@ -1,6 +1,6 @@
 {
   "name": "netsignal",
-  "version": "0.2.2",
+  "version": "0.2.1",
   "description": "Internet signal bars (latency to api.anthropic.com + periodic bandwidth) in the Claude Code status line.",
   "author": {
     "name": "Avazbek Ibragimov"
