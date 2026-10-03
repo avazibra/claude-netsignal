@@ -78,6 +78,7 @@ settings:
 | `latencyUrl` | `https://api.anthropic.com/` | latency target |
 | `bandwidthUrl` | `https://speed.cloudflare.com/__down?bytes=3000000` | bandwidth target |
 | `desktopPlacement` | `pill` | desktop app: `pill` above the prompt, `footer` beside the model, or `both` |
+| `pillStyle` | `soft` | desktop pill look: `soft` (pastel), `outline`, `solid` or `dark` |
 
 ## Upgrading from 0.1.x
 

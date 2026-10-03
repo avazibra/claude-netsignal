@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Engine, PluginOptions, Register, SessionMeasureInput } from 'claude-code'
 
 import type { UsageSnapshot as Snapshot, UsageTokens as Tokens } from '../types'
-import { type Run, TONES, pill, tokens } from './pills'
+import { type Run, type Style, TONES, pill, styleFrom, tokens } from './pills'
 
 // The latest reading, held by the host so the band redraws on each measurement.
 const lastReading = atom({ plugin: 'usagebar', key: 'last' } as const, null)
@@ -17,6 +17,7 @@ type Config = {
   showCost: boolean
   showTokens: boolean
   desktopPlacement: string
+  pillStyle: Style
 }
 
 export const configFrom = (options: PluginOptions): Config => ({
@@ -27,6 +28,7 @@ export const configFrom = (options: PluginOptions): Config => ({
   showCost: options.showCost !== false,
   showTokens: options.showTokens !== false,
   desktopPlacement: String(options.desktopPlacement ?? 'pill'),
+  pillStyle: styleFrom(options.pillStyle),
 })
 
 type Figures = Pick<SessionMeasureInput, 'context' | 'rateLimits' | 'cost'>
@@ -97,7 +99,7 @@ export const pills = (s: Snapshot, t: Tokens, c: Config, now: number) => {
     const runs: Run[] = [{ kind: 'icon', icon: 'coin' }, { kind: 'text', text: `$${s.usd.toFixed(2)}` }]
     groups.push([{ key: 'cost', runs, tone: TONES.cost, alt: `$${s.usd.toFixed(2)} this session` }])
   }
-  return groups.map(g => g.map(p => ({ key: p.key, alt: p.alt, ...pill(p.runs, p.tone) })))
+  return groups.map(g => g.map(p => ({ key: p.key, alt: p.alt, ...pill(p.runs, p.tone, c.pillStyle) })))
 }
 
 const pct = (n: number) => `${Math.round(n)}%`

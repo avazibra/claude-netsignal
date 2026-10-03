@@ -65,6 +65,18 @@
       "title": "Show tokens",
       "description": "Also show the tokens this session sent and received",
       "default": true
+    },
+    "pillStyle": {
+      "type": "string",
+      "title": "Pill style",
+      "description": "How the desktop pills look: soft (pastel), outline, solid or dark",
+      "options": [
+        "soft",
+        "outline",
+        "solid",
+        "dark"
+      ],
+      "default": "soft"
     }
   },
   "types": "./types/index.d.ts"

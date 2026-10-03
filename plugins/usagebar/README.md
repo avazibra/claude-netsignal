@@ -47,7 +47,7 @@ repository it works on. Run `/usagebar` in a cloud session to check it.
 ## Options
 
 Every option is a row in `/config`: `style` (`full` adds reset countdowns, `compact` drops
-them), `warnAt` (70), `alertAt` (90), `showContext` (on), `showTokens` (on), `showCost` (on), `desktopPlacement` (`pill`, `footer` or `both`).
+them), `warnAt` (70), `alertAt` (90), `showContext` (on), `showTokens` (on), `showCost` (on), `desktopPlacement` (`pill`, `footer` or `both`), `pillStyle` (`soft`, `outline`, `solid` or `dark`).
 
 ## Develop
 
