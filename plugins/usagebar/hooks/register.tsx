@@ -79,21 +79,25 @@ const PILL: Record<Level | 'neutral', { color: string; backgroundColor: string }
   neutral: { color: '#6f6e69', backgroundColor: '#e6e4d9' },
 }
 
-// The desktop app draws a plugin's status line in its footer as well as the
-// band pills, so there the status line shows only when asked for.
-async function showStatus($: Engine, s: Snapshot, c: Config) {
-  let isDesktop = false
+// Whether an app (desktop, web, phone) has drawn the band: the desktop app is
+// not always in the surface roster, but it always asks for the band.
+type View = { isApp: boolean }
+
+// The apps draw a plugin's status line in their footer as well as the band
+// pills, so there the status line shows only when asked for.
+async function showStatus($: Engine, s: Snapshot, c: Config, view: View) {
+  let isApp = view.isApp
   try {
-    isDesktop = (await $.session.surfaces()).includes('desktop')
+    isApp ||= (await $.session.surfaces()).some(x => x !== 'terminal')
   } catch {
     // No surface roster (a headless run): treat it as the terminal.
   }
-  const wantsStatus = !isDesktop || c.desktopPlacement !== 'pill'
+  const wantsStatus = !isApp || c.desktopPlacement !== 'pill'
   $.ui.status(wantsStatus ? render(s, c, await $.clock.now()) : undefined)
 }
 
-async function show($: Engine, s: Snapshot, c: Config, alerted: Set<string>) {
-  await showStatus($, s, c)
+async function show($: Engine, s: Snapshot, c: Config, view: View, alerted: Set<string>) {
+  await showStatus($, s, c, view)
   await update($, lastReading, () => s)
   for (const w of s.windows) {
     const id = `${w.kind}@${w.resetsAt ?? ''}`
@@ -109,21 +113,22 @@ export const register: Register = (on, options) => {
   const c = configFrom(options)
   // Windows already toasted about, so each crossing toasts once per reset.
   const alerted = new Set<string>()
+  const view: View = { isApp: false }
 
   on('session.start', async ($, e, next) => {
     const result = await next(e)
     await $.command.register({ name: 'usagebar', description: 'Show your plan usage, context fill and session cost' })
-    await show($, snapshotFrom(await $.session.usage()), c, alerted)
+    await show($, snapshotFrom(await $.session.usage()), c, view, alerted)
     // Reset countdowns move without a new measurement: redraw them each minute.
     $.clock.every(60_000, async () => {
       const s = await read($, lastReading)
-      if (s) await showStatus($, s, c)
+      if (s) await showStatus($, s, c, view)
     })
     return result
   })
 
   on('session.measure', async ($, e, next) => {
-    await show($, snapshotFrom(e), c, alerted)
+    await show($, snapshotFrom(e), c, view, alerted)
     return next(e)
   })
 
@@ -131,6 +136,11 @@ export const register: Register = (on, options) => {
   // add ours beside whatever the plugins beneath draw there, unless the
   // footer was chosen instead. The terminal keeps the status line alone.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.surface !== 'terminal' && !view.isApp) {
+      view.isApp = true
+      const seen = await read($, lastReading)
+      if (seen) await showStatus($, seen, c, view)
+    }
     const isPill = c.desktopPlacement !== 'footer'
     if (e.surface === 'terminal' || !isPill || e.props.hasSurvey) return next(e)
     const s = await read($, lastReading)

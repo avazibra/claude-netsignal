@@ -122,3 +122,18 @@ test('desktop footer placement keeps the status line', { options: { desktopPlace
   await clock.settle()
   expect(statuses.at(-1)).toBe('5h 42% ↻2h10m · 7d 18% ↻3d4h · ctx 31%')
 })
+
+test('a desktop band clears the footer even when the roster lacks the app', async ($, on) => {
+  const { clock, statuses } = wire(on, ['terminal'])
+  await $.session.start(start)
+  await clock.settle()
+  expect(statuses.at(-1)).toBe('5h 42% ↻2h10m · 7d 18% ↻3d4h · ctx 31%')
+
+  const props = { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 80, scroll: { offset: 0, bodyRows: 10 }, view: {} }
+  await $.ui.mount({ plugin: 'usagebar', surface: 'desktop', component: 'AbovePrompt', props })
+  expect(statuses.at(-1)).toBe(undefined)
+
+  // Later redraws keep it clear.
+  await clock.advance(60_000)
+  expect(statuses.at(-1)).toBe(undefined)
+})

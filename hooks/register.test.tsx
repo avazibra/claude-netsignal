@@ -152,6 +152,38 @@ test('desktop hides the footer status line by default', async ($, on) => {
   expect(statuses.every(text => text === undefined)).toBe(true)
 })
 
+test('a desktop band clears the footer even when the roster lacks the app', async ($, on) => {
+  const clock = mock.clock(on)
+  const statuses: (string | undefined)[] = []
+
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('session.surfaces', () => ({ value: ['terminal'] as const }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('ui.status', ($, e) => {
+    statuses.push(e.text)
+    return { value: undefined }
+  })
+  on('http.fetch', async () => {
+    await clock.sleep(48)
+    return { value: { status: 200, ok: true, headers: {}, text: '' } }
+  })
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text key="other">x</Text>
+  })
+
+  await $.session.start(start)
+  await clock.advance(2000)
+  expect(statuses.at(-1)).toBe('▂▄▆ 48ms')
+
+  await $.ui.mount({ plugin: 'netsignal', surface: 'desktop', component: 'AbovePrompt', props: BAND })
+  expect(statuses.at(-1)).toBe(undefined)
+
+  // The next sample keeps it clear.
+  await clock.advance(30_000)
+  expect(statuses.at(-1)).toBe(undefined)
+})
+
 test('desktop footer placement keeps the status line and drops the pill', { options: { desktopPlacement: 'footer' } }, async ($, on) => {
   const clock = mock.clock(on)
   const statuses: (string | undefined)[] = []
