@@ -46,6 +46,9 @@ claude plugin install usagebar@claude-statusbar
 Every session on that environment then loads usagebar from its first turn, whatever
 repository it works on. Run `/usagebar` in a cloud session to check it.
 
+In a cloud session `/usagebar` is the way to see your usage: the app draws neither the
+pills nor the status line for cloud sessions (checked in the desktop app, October 2026).
+
 ## Options
 
 Every option is a row in `/config`: `style` (`full` adds reset countdowns, `compact` drops
