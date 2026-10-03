@@ -19,6 +19,7 @@ test('samples on start and shows the signal in the status line', async ($, on) =
   const fetched: string[] = []
 
   on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('session.surfaces', () => ({ value: ['terminal'] as const }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('ui.status', ($, e) => {
     statuses.push(e.text)
@@ -55,6 +56,7 @@ test('shows offline when the latency probe fails', async ($, on) => {
   const statuses: (string | undefined)[] = []
 
   on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('session.surfaces', () => ({ value: ['terminal'] as const }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('ui.status', ($, e) => {
     statuses.push(e.text)
@@ -75,6 +77,7 @@ test('bars style shows only the glyph', { options: { style: 'bars' } }, async ($
   const statuses: (string | undefined)[] = []
 
   on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('session.surfaces', () => ({ value: ['terminal'] as const }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('ui.status', ($, e) => {
     statuses.push(e.text)
@@ -124,6 +127,57 @@ test('desktop band shows a pill beside the pills beneath it', async ($, on) => {
   const band = await $.ui.mount({ plugin: 'netsignal', surface: 'desktop', component: 'AbovePrompt', props: BAND })
   expect((await band.find({ key: 'netsignal' }))?.text).toBe('▂▄▆ 48ms')
   expect(await band.find({ text: '5h 20%' })).not.toBe(undefined)
+})
+
+test('desktop hides the footer status line by default', async ($, on) => {
+  const clock = mock.clock(on)
+  const statuses: (string | undefined)[] = []
+
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('session.surfaces', () => ({ value: ['desktop'] as const }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('ui.status', ($, e) => {
+    statuses.push(e.text)
+    return { value: undefined }
+  })
+  on('http.fetch', async () => {
+    await clock.sleep(48)
+    return { value: { status: 200, ok: true, headers: {}, text: '' } }
+  })
+
+  await $.session.start(start)
+  await clock.advance(2000)
+
+  expect(statuses.length > 0).toBe(true)
+  expect(statuses.every(text => text === undefined)).toBe(true)
+})
+
+test('desktop footer placement keeps the status line and drops the pill', { options: { desktopPlacement: 'footer' } }, async ($, on) => {
+  const clock = mock.clock(on)
+  const statuses: (string | undefined)[] = []
+
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('session.surfaces', () => ({ value: ['desktop'] as const }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('ui.status', ($, e) => {
+    statuses.push(e.text)
+    return { value: undefined }
+  })
+  on('http.fetch', async () => {
+    await clock.sleep(48)
+    return { value: { status: 200, ok: true, headers: {}, text: '' } }
+  })
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text key="other">x</Text>
+  })
+
+  await $.session.start(start)
+  await clock.advance(2000)
+
+  expect(statuses.at(-1)).toBe('▂▄▆ 48ms')
+  const band = await $.ui.mount({ plugin: 'netsignal', surface: 'desktop', component: 'AbovePrompt', props: BAND })
+  expect(await band.find({ key: 'netsignal' })).toBe(undefined)
 })
 
 test('terminal band is left to the plugins beneath', async ($, on) => {
