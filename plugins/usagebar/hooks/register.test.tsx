@@ -30,13 +30,14 @@ test('compact style drops reset times; cost only when asked', () => {
   expect(render({ windows: [] }, configFrom({}), NOW)).toBe(undefined)
 })
 
-function wire(on: On) {
+function wire(on: On, surfaces: ('terminal' | 'desktop')[] = ['terminal']) {
   const clock = mock.clock(on, { now: NOW })
   const statuses: (string | undefined)[] = []
   const toasts: string[] = []
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('session.usage', () => ({ value: usage }))
+  on('session.surfaces', () => ({ value: surfaces }))
   on('session.measure', ($, e) => ({ changed: e.changed }))
   on('ui.render', ($, e) => {
     const { Box } = $.ui.resolve(e)
@@ -105,4 +106,19 @@ test('draws pills above the prompt in the apps, not the terminal', async ($, on)
 
   const terminal = await $.ui.mount({ plugin: 'usagebar', surface: 'terminal', component: 'AbovePrompt', props })
   expect((await terminal.findAll({ type: 'Text', text: /5h/ })).length).toBe(0)
+})
+
+test('desktop shows pills only, the footer stays empty', async ($, on) => {
+  const { clock, statuses } = wire(on, ['desktop'])
+  await $.session.start(start)
+  await clock.settle()
+  expect(statuses.length).toBeGreaterThan(0)
+  expect(statuses.every(t => t === undefined)).toBe(true)
+})
+
+test('desktop footer placement keeps the status line', { options: { desktopPlacement: 'footer' } }, async ($, on) => {
+  const { clock, statuses } = wire(on, ['desktop'])
+  await $.session.start(start)
+  await clock.settle()
+  expect(statuses.at(-1)).toBe('5h 42% ↻2h10m · 7d 18% ↻3d4h · ctx 31%')
 })

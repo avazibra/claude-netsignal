@@ -48,6 +48,17 @@
       "title": "Show cost",
       "description": "Also show the session's cost in dollars",
       "default": false
+    },
+    "desktopPlacement": {
+      "type": "string",
+      "title": "Desktop placement",
+      "description": "Where the desktop app shows usage: pill (above the prompt), footer (status line beside the model) or both",
+      "options": [
+        "pill",
+        "footer",
+        "both"
+      ],
+      "default": "pill"
     }
   },
   "types": "./types/index.d.ts"

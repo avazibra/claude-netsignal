@@ -12,6 +12,7 @@ type Config = {
   alertAt: number
   showContext: boolean
   showCost: boolean
+  desktopPlacement: string
 }
 
 export const configFrom = (options: PluginOptions): Config => ({
@@ -20,6 +21,7 @@ export const configFrom = (options: PluginOptions): Config => ({
   alertAt: Number(options.alertAt ?? 90),
   showContext: options.showContext !== false,
   showCost: options.showCost === true,
+  desktopPlacement: String(options.desktopPlacement ?? 'pill'),
 })
 
 type Figures = Pick<SessionMeasureInput, 'context' | 'rateLimits' | 'cost'>
@@ -77,8 +79,21 @@ const PILL: Record<Level | 'neutral', { color: string; backgroundColor: string }
   neutral: { color: '#6f6e69', backgroundColor: '#e6e4d9' },
 }
 
+// The desktop app draws a plugin's status line in its footer as well as the
+// band pills, so there the status line shows only when asked for.
+async function showStatus($: Engine, s: Snapshot, c: Config) {
+  let isDesktop = false
+  try {
+    isDesktop = (await $.session.surfaces()).includes('desktop')
+  } catch {
+    // No surface roster (a headless run): treat it as the terminal.
+  }
+  const wantsStatus = !isDesktop || c.desktopPlacement !== 'pill'
+  $.ui.status(wantsStatus ? render(s, c, await $.clock.now()) : undefined)
+}
+
 async function show($: Engine, s: Snapshot, c: Config, alerted: Set<string>) {
-  $.ui.status(render(s, c, await $.clock.now()))
+  await showStatus($, s, c)
   await update($, lastReading, () => s)
   for (const w of s.windows) {
     const id = `${w.kind}@${w.resetsAt ?? ''}`
@@ -102,7 +117,7 @@ export const register: Register = (on, options) => {
     // Reset countdowns move without a new measurement: redraw them each minute.
     $.clock.every(60_000, async () => {
       const s = await read($, lastReading)
-      if (s) $.ui.status(render(s, c, await $.clock.now()))
+      if (s) await showStatus($, s, c)
     })
     return result
   })
@@ -113,10 +128,11 @@ export const register: Register = (on, options) => {
   })
 
   // The desktop and web apps show plugin pills in the band above the prompt:
-  // add ours beside whatever the plugins beneath draw there. The terminal
-  // keeps the status line alone.
+  // add ours beside whatever the plugins beneath draw there, unless the
+  // footer was chosen instead. The terminal keeps the status line alone.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (e.surface === 'terminal' || e.props.hasSurvey) return next(e)
+    const isPill = c.desktopPlacement !== 'footer'
+    if (e.surface === 'terminal' || !isPill || e.props.hasSurvey) return next(e)
     const s = await read($, lastReading)
     if (s === null) return next(e)
     const items = parts(s, c, await $.clock.now())
