@@ -181,8 +181,10 @@ export const register: Register = (on, options) => {
     const p = signalPill(await read($, lastSample), m.config, (await read($, pickedStyle)) ?? m.config.pillStyle)
     const { Box, Svg } = $.ui.resolve(e)
     const below = await next(e)
+    // Top-aligned, so when the plugins beneath wrap onto a second row the
+    // pill sits in line with their first row rather than between the two.
     return (
-      <Box flexDirection="row" alignItems="center" gap={1}>
+      <Box flexDirection="row" alignItems="flex-start" gap={1}>
         <Svg key="netsignal" source={p.source} alt={p.alt} width={p.width} height={p.height} />
         {below}
       </Box>
