@@ -1,47 +1,96 @@
 # claude-netsignal
 
-Internet signal bars in the Claude Code status line.
+Internet signal bars for Claude Code: latency to `api.anthropic.com` and your download speed,
+always in view while you work.
 
 ```
-Fable · code · 42k · ▂▄▆ 48ms ↓19M
+▂▄▆ 48ms ↓19M
 ```
 
-- **Latency**: time-to-first-byte to `api.anthropic.com`, sampled every 30 s. That is the
-  network Claude Code actually feels, not a generic ping.
-- **Bandwidth**: a 3 MB download every 5 min (Cloudflare's speed endpoint by default —
-  Anthropic serves no large static body, so a bandwidth probe against `api.anthropic.com`
-  would only measure latency twice).
-- **Colour**: green under 300 ms, yellow under 700 ms, red above; `✕ offline` when
-  unreachable; grey `▂▄▆ ?` when there is no fresh sample.
+- **Latency**: time to `api.anthropic.com`, sampled every 30 s. That is the network Claude Code
+  actually feels, not a generic ping.
+- **Bandwidth**: a 3 MB download every 5 min (Cloudflare's speed endpoint by default;
+  Anthropic serves no large static body).
+- **Levels**: good under 300 ms, OK under 700 ms, poor under 1500 ms, bad above; `✕ offline`
+  when unreachable; `▂▄▆ ?` before the first sample.
 
-Since 0.2.0 netsignal is a Claude Code mod: a hooks module (`hooks/register.ts`) samples
-through Claude Code's own network on a timer and pins the signal as the plugin's status line
-under the prompt. Nothing to install into `settings.json`, no background process, and it stops
-with the session.
+netsignal is a Claude Code mod: it samples through Claude Code's own network on a timer while a
+session is open and stops with it. Nothing is written to `settings.json` and nothing runs in the
+background.
 
 ## Install
 
+In a terminal:
+
 ```
-/plugin marketplace add avazibra/claude-netsignal
-/plugin install netsignal@claude-netsignal
+claude plugin marketplace add avazibra/claude-netsignal
+claude plugin install netsignal@claude-netsignal
 ```
 
-The signal appears under the prompt as soon as the session starts. In the desktop app's Code
-tab it is also a coloured pill (green, yellow, red) in the band above the prompt, beside any
-pills other plugins draw there. `/signal` prints the latest
-sample in full; `/signal now` re-samples first.
+or the same as `/plugin marketplace add …` and `/plugin install …` at the Claude Code prompt.
+Then start a new session.
 
-### Configure the mod
+To get a newer version later:
 
-Every option is a row in `/config` (or `pluginConfigs.netsignal` in settings): `style`
-(`bars`, `short`, `full`), `goodMs` / `okMs` / `badMs` (300 / 700 / 1500), `intervalSec` (30),
-`bandwidthIntervalSec` (300; `0` disables), `latencyUrl`, `bandwidthUrl`. The mod draws plain
-text in the terminal, so levels show as filled bars `▂▄▆`, `▂▄·`, `▂··`, `···` and `✕ offline`
-instead of colour.
+```
+claude plugin marketplace update claude-netsignal
+claude plugin update netsignal@claude-netsignal
+```
 
-To try a checkout in the desktop app before installing, add
-`"env": { "CLAUDE_CODE_PLUGIN_DIRS": "/path/to/claude-netsignal" }` to `~/.claude/settings.json`
-and start a new session; in a terminal, `claude --plugin-dir /path/to/claude-netsignal`.
+`install` may note that the `userConfig` options are not set yet. That is fine: every option has
+a default (see [Configure](#configure)).
+
+### Local sessions only
+
+The plugin loads in sessions that run on your machine: the `claude` CLI in a terminal, or a
+desktop Code-tab session whose environment is a local folder. A cloud session (the cloud icon
+next to the session name, an environment such as `Default · <repo>`) runs on a remote machine and
+does not see plugins installed on yours, and its network is not yours anyway.
+
+## Use
+
+- **Terminal**: the signal is pinned as a status line under the prompt, as plain text, with the
+  level shown by filled bars: `▂▄▆`, `▂▄·`, `▂··`, `···`, `✕ offline`.
+- **Desktop app (Code tab)**: a green, yellow or red pill in the band above the prompt, beside any
+  pills other plugins draw there. The desktop app would also repeat a plugin's status line in its
+  footer, next to the model name; netsignal leaves that off unless you set `desktopPlacement` to
+  `footer` (status line only) or `both`.
+- **`/signal`** prints the latest sample in full (latency, target, bandwidth, age).
+  **`/signal now`** takes a fresh sample first.
+
+## Configure
+
+Open `/config` and find the netsignal rows, or set them under `pluginConfigs.netsignal` in
+settings:
+
+| Option | Default | Meaning |
+|---|---|---|
+| `style` | `full` | `bars` (▂▄▆), `short` (+ ms), `full` (+ Mbps) |
+| `goodMs` / `okMs` / `badMs` | 300 / 700 / 1500 | latency thresholds, ms |
+| `intervalSec` | 30 | seconds between latency samples |
+| `bandwidthIntervalSec` | 300 | seconds between bandwidth samples; `0` disables |
+| `latencyUrl` | `https://api.anthropic.com/` | latency target |
+| `bandwidthUrl` | `https://speed.cloudflare.com/__down?bytes=3000000` | bandwidth target |
+| `desktopPlacement` | `pill` | desktop app: `pill` above the prompt, `footer` beside the model, or `both` |
+
+## Upgrading from 0.1.x
+
+0.1.x drew the signal through your `statusLine` setting, installed by `/netsignal`. If you ran
+it, remove that so the signal does not show twice:
+
+```
+~/.claude/netsignal uninstall
+```
+
+This restores the status line you had before. `/netsignal` (shown as `/netsignal:netsignal`) is
+only for that classic setup; the mod's command is `/signal`.
+
+## Develop
+
+Load a checkout for one session with `claude --plugin-dir /path/to/claude-netsignal`. For the
+desktop app, add `"env": { "CLAUDE_CODE_PLUGIN_DIRS": "/path/to/claude-netsignal" }` to
+`~/.claude/settings.json` and start a new local session. Check changes with
+`claude plugin validate .claude-plugin/plugin.json` and `claude plugin test .`.
 
 ## Classic status line (older Claude Code)
 
@@ -94,8 +143,6 @@ types/index.d.ts                the mod's $.state contract
 skills/netsignal/SKILL.md       /netsignal: classic status line install, remove, tune, diagnose
 bin/netsignal                   classic sampler + renderer + installer (one bash script)
 ```
-
-Check the mod with `claude plugin validate .claude-plugin/plugin.json` and `claude plugin test .`.
 
 ## License
 
