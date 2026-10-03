@@ -1,12 +1,12 @@
 {
   "name": "usagebar",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Your Claude plan usage (5-hour and weekly limits), context fill and session cost, in the status line and as pills above the prompt.",
   "author": {
     "name": "Avazbek Ibragimov"
   },
-  "homepage": "https://github.com/avazibra/claude-netsignal",
-  "repository": "https://github.com/avazibra/claude-netsignal",
+  "homepage": "https://github.com/avazibra/claude-statusbar",
+  "repository": "https://github.com/avazibra/claude-statusbar",
   "license": "MIT",
   "keywords": [
     "statusline",

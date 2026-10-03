@@ -186,7 +186,7 @@ cmd_install() {
   cat > "$shim" <<SHIM
 #!/usr/bin/env bash
 # netsignal shim (written by \`netsignal install\`): exec the currently installed plugin.
-p=\$(jq -r '.plugins["netsignal@claude-netsignal"][0].installPath // empty' "\$HOME/.claude/plugins/installed_plugins.json" 2>/dev/null)
+p=\$(jq -r '.plugins["netsignal@claude-statusbar"][0].installPath // .plugins["netsignal@claude-netsignal"][0].installPath // empty' "\$HOME/.claude/plugins/installed_plugins.json" 2>/dev/null)
 [[ -n \$p && -x \$p/bin/netsignal ]] || p="$root"
 exec "\$p/bin/netsignal" "\$@"
 SHIM

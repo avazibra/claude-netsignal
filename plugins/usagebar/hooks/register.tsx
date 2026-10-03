@@ -82,23 +82,29 @@ export const pills = (s: Snapshot, t: Tokens, c: Config, now: number, style: Sty
       { kind: 'text', text: pct(w.percent), bold: true },
     ]
     const reset = until(w.resetsAt, now, ' ')
-    if (reset) runs.push({ kind: 'divider' }, { kind: 'icon', icon: 'clock' }, { kind: 'text', text: reset, muted: true })
+    if (reset) runs.push({ kind: 'icon', icon: 'clock' }, { kind: 'text', text: reset, muted: true })
     const tone = w.kind === 'seven_day' ? TONES.sevenDay : TONES.fiveHour
     return { key: w.kind, runs, tone, alt: `${label(w.kind)} limit ${pct(w.percent)} used${reset ? `, resets in ${reset}` : ''}` }
   })
   if (limits.length) groups.push(limits)
-  const session = []
+  // Sent, received and context share one pill, each figure behind its own
+  // coloured icon, so the whole set fits one row.
+  const runs: Run[] = []
+  const said: string[] = []
   if (c.showTokens && (t.input > 0 || t.output > 0)) {
-    session.push(
-      { key: 'input', runs: [{ kind: 'icon', icon: 'upload' }, { kind: 'text', text: tokens(t.input) }] as Run[], tone: TONES.input, alt: `${tokens(t.input)} tokens sent` },
-      { key: 'output', runs: [{ kind: 'icon', icon: 'download' }, { kind: 'text', text: tokens(t.output) }] as Run[], tone: TONES.output, alt: `${tokens(t.output)} tokens received` },
+    runs.push(
+      { kind: 'icon', icon: 'upload', tone: TONES.input },
+      { kind: 'text', text: tokens(t.input) },
+      { kind: 'icon', icon: 'download', tone: TONES.output },
+      { kind: 'text', text: tokens(t.output) },
     )
+    said.push(`${tokens(t.input)} tokens sent`, `${tokens(t.output)} received`)
   }
   if (c.showContext && s.contextTokens !== undefined) {
-    const runs: Run[] = [{ kind: 'icon', icon: 'layers' }, { kind: 'text', text: tokens(s.contextTokens) }]
-    session.push({ key: 'context', runs, tone: TONES.context, alt: `${tokens(s.contextTokens)} tokens in context` })
+    runs.push({ kind: 'icon', icon: 'layers', tone: TONES.context }, { kind: 'text', text: tokens(s.contextTokens) })
+    said.push(`${tokens(s.contextTokens)} in context`)
   }
-  if (session.length) groups.push(session)
+  if (runs.length) groups.push([{ key: 'session', runs, tone: TONES.unknown, alt: said.join(', ') }])
   if (c.showCost && s.usd !== undefined) {
     const runs: Run[] = [{ kind: 'icon', icon: 'coin' }, { kind: 'text', text: `$${s.usd.toFixed(2)}` }]
     groups.push([{ key: 'cost', runs, tone: TONES.cost, alt: `$${s.usd.toFixed(2)} this session` }])
@@ -231,12 +237,8 @@ export const register: Register = (on, options) => {
     const below = await next(e)
     return (
       <Box flexDirection="row" alignItems="center" flexWrap="wrap" gap={1}>
-        {groups.map((g, i) => (
-          <Box key={`usagebar-group-${i}`} flexDirection="row" alignItems="center" gap={1} marginRight={i < groups.length - 1 ? 2 : 0}>
-            {g.map(p => (
-              <Svg key={`usagebar-${p.key}`} source={p.source} alt={p.alt} width={p.width} height={p.height} />
-            ))}
-          </Box>
+        {groups.flat().map(p => (
+          <Svg key={`usagebar-${p.key}`} source={p.source} alt={p.alt} width={p.width} height={p.height} />
         ))}
         <Button
           key="usagebar-style"
