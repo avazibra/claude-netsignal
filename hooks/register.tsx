@@ -15,6 +15,7 @@ type Config = {
   bwIntervalMs: number
   latencyUrl: string
   bwUrl: string
+  desktopPlacement: string
 }
 
 type Meter = { config: Config; last: Sample | null; bwAt: number; inFlight: Promise<void> | null }
@@ -28,6 +29,7 @@ export const configFrom = (options: PluginOptions): Config => ({
   bwIntervalMs: Math.max(0, Number(options.bandwidthIntervalSec ?? 300)) * 1000,
   latencyUrl: String(options.latencyUrl ?? 'https://api.anthropic.com/'),
   bwUrl: String(options.bandwidthUrl ?? 'https://speed.cloudflare.com/__down?bytes=3000000'),
+  desktopPlacement: String(options.desktopPlacement ?? 'pill'),
 })
 
 export const bars = (latencyMs: number, c: Config) => {
@@ -87,6 +89,19 @@ function sample($: Engine, m: Meter) {
   return m.inFlight
 }
 
+// The desktop app draws a plugin's status line in its footer as well as the
+// band pill, so there the status line shows only when asked for.
+async function showStatus($: Engine, m: Meter) {
+  let isDesktop = false
+  try {
+    isDesktop = (await $.session.surfaces()).includes('desktop')
+  } catch {
+    // No surface roster (a headless run): treat it as the terminal.
+  }
+  const wantsStatus = !isDesktop || m.config.desktopPlacement !== 'pill'
+  $.ui.status(wantsStatus ? render(m.last, m.config) : undefined)
+}
+
 async function probe($: Engine, m: Meter) {
   const c = m.config
   const lat = await timed($, c.latencyUrl)
@@ -99,7 +114,7 @@ async function probe($: Engine, m: Meter) {
   }
   const latest: Sample = { at, latencyMs: lat ? Math.max(1, Math.round(lat.ms)) : 0, mbps }
   m.last = latest
-  $.ui.status(render(latest, c))
+  await showStatus($, m)
   await update($, lastSample, () => latest)
 }
 
@@ -108,7 +123,7 @@ export const register: Register = (on, options) => {
 
   on('session.start', async ($, e, next) => {
     const result = await next(e)
-    $.ui.status(render(m.last, m.config))
+    await showStatus($, m)
     await $.command.register({
       name: 'signal',
       description: 'Show the latest network signal sample; "now" re-samples first',
@@ -120,10 +135,11 @@ export const register: Register = (on, options) => {
   })
 
   // The desktop app shows plugin pills in the band above the prompt: add ours
-  // beside whatever the plugins beneath draw there. The terminal keeps the
-  // status line alone.
+  // beside whatever the plugins beneath draw there, unless the footer was
+  // chosen instead. The terminal keeps the status line alone.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (e.surface !== 'desktop' || e.props.hasSurvey) return next(e)
+    const isPill = m.config.desktopPlacement !== 'footer'
+    if (e.surface !== 'desktop' || !isPill || e.props.hasSurvey) return next(e)
     const last = await read($, lastSample)
     const { Box, Text } = $.ui.resolve(e)
     const below = await next(e)

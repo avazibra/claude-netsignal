@@ -52,7 +52,9 @@ does not see plugins installed on yours, and its network is not yours anyway.
 - **Terminal**: the signal is pinned as a status line under the prompt, as plain text, with the
   level shown by filled bars: `▂▄▆`, `▂▄·`, `▂··`, `···`, `✕ offline`.
 - **Desktop app (Code tab)**: a green, yellow or red pill in the band above the prompt, beside any
-  pills other plugins draw there.
+  pills other plugins draw there. The desktop app would also repeat a plugin's status line in its
+  footer, next to the model name; netsignal leaves that off unless you set `desktopPlacement` to
+  `footer` (status line only) or `both`.
 - **`/signal`** prints the latest sample in full (latency, target, bandwidth, age).
   **`/signal now`** takes a fresh sample first.
 
@@ -69,6 +71,7 @@ settings:
 | `bandwidthIntervalSec` | 300 | seconds between bandwidth samples; `0` disables |
 | `latencyUrl` | `https://api.anthropic.com/` | latency target |
 | `bandwidthUrl` | `https://speed.cloudflare.com/__down?bytes=3000000` | bandwidth target |
+| `desktopPlacement` | `pill` | desktop app: `pill` above the prompt, `footer` beside the model, or `both` |
 
 ## Upgrading from 0.1.x
 
